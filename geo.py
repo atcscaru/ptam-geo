@@ -4,10 +4,10 @@ import re
 from urllib.parse import urlparse, unquote
 import requests
 
-HEADERS = {'User-Agent': 'PTAM-GEO/1.1 (geographic research; contact: repository administrator)'}
+HEADERS = {'User-Agent': 'PTAM-GEO/1.2 (geographic research; contact: repository administrator)'}
 ENDPOINTS = (
     'https://overpass.private.coffee/api/interpreter',
-    'https://overpass.kumi.systems/api/interpreter',
+    'https://overpass.nchc.org.tw/api/interpreter',
     'https://overpass-api.de/api/interpreter',
 )
 CATEGORIES = {
@@ -66,12 +66,13 @@ def haversine(a,b,c,d):
     return round(2*r*math.asin(min(1,math.sqrt(x))))
 
 def _overpass(query, endpoint=None):
-    """Tentativas sequenciais; falha explícita, nunca substituída por resultados fictícios."""
+    """Consultas limitadas em múltiplos provedores. Sem garantia de disponibilidade."""
     endpoints = ([endpoint] if endpoint else []) + [e for e in ENDPOINTS if e != endpoint]
     errors = []
     for url in endpoints:
         try:
-            response = requests.post(url, data={'data':query}, headers=HEADERS, timeout=(5, 17))
+            # GET evita alguns bloqueios de POST em hospedagens compartilhadas.
+            response = requests.get(url, params={'data': query}, headers=HEADERS, timeout=(4, 12))
             response.raise_for_status()
             data = response.json()
             if not isinstance(data, dict) or not isinstance(data.get('elements'), list):
@@ -79,7 +80,7 @@ def _overpass(query, endpoint=None):
             return data
         except (requests.RequestException, ValueError) as exc:
             errors.append(f'{urlparse(url).hostname}: {type(exc).__name__}')
-    raise RuntimeError('Servidores Overpass indisponíveis após tentativas alternativas (' + '; '.join(errors) + '). Tente novamente mais tarde. Nenhum resultado foi inventado.')
+    raise RuntimeError('Fontes Overpass temporariamente indisponíveis (' + '; '.join(errors) + '). Não foi possível confirmar estabelecimentos. Nenhum resultado foi inventado.')
 
 def query_osm(lat,lon,radius=1000,endpoint=None):
     if not (-90<=lat<=90 and -180<=lon<=180):
@@ -87,8 +88,12 @@ def query_osm(lat,lon,radius=1000,endpoint=None):
     if not 50 <= radius <= 5000:
         raise ValueError('Raio deve estar entre 50 e 5.000 metros.')
     pairs = sorted(set(pair for items in CATEGORIES.values() for pair in items))
-    clauses = [f'nwr["{k}"="{v}"](around:{int(radius)},{lat},{lon});' for k,v in pairs]
-    query='[out:json][timeout:15];(' + ''.join(clauses) + ');out center tags;'
+    # Uma cláusula por chave, usando regex de valores, reduz o tamanho da consulta.
+    grouped = {}
+    for k,v in pairs:
+        grouped.setdefault(k, []).append(v)
+    clauses = [f'nwr["{k}"~"^({"|".join(sorted(set(values)))})$"](around:{int(radius)},{lat},{lon});' for k,values in grouped.items()]
+    query='[out:json][timeout:12];(' + ''.join(clauses) + ');out center tags;'
     data=_overpass(query,endpoint)
     result=[];seen=set()
     for el in data['elements']:
@@ -124,7 +129,7 @@ def road_distance(lat,lon,lat2,lon2,timeout=8):
 
 def street_context(lat,lon,radius=150,endpoint=None):
     """Cadastro indicativo de via/superfície. Não comprova pavimentação nem esquina."""
-    query=f'[out:json][timeout:15];way["highway"](around:{int(radius)},{lat},{lon});out center tags;'
+    query=f'[out:json][timeout:12];way["highway"]["name"](around:{int(radius)},{lat},{lon});out center tags;'
     data=_overpass(query,endpoint)
     roads=[]
     for el in data['elements']:
