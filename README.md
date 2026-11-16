@@ -1,51 +1,28 @@
-# PTAM GEO v1.0
+# PTAM GEO v2.0
 
-Aplicativo web Streamlit para pesquisa geográfica, conferência humana e exportação de considerandos para PTAM em Word editável.
+Aplicativo Streamlit de pesquisa geográfica para subsidiar os considerandos de PTAM. Integra Google Places API (New), Routes API e exportação Word. Revisão humana obrigatória. Não substitui vistoria, fontes oficiais ou responsabilidade técnica.
 
-## Instalação
+## Publicação no Streamlit Cloud
 
-Requer Python 3.10 ou superior.
+1. Substitua os arquivos `app.py`, `geo.py`, `exporter.py`, `requirements.txt` e `README.md` no repositório GitHub existente. O nome do aplicativo e o endereço publicado podem permanecer os mesmos.
+2. Google Cloud Console: crie ou selecione projeto, ative faturamento e habilite **Places API (New)** e **Routes API**. Crie uma chave de API com restrições adequadas às chamadas de servidor (restrição por API e, quando aplicável, por origem/IP). Não coloque a chave no GitHub.
+3. Streamlit Cloud > aplicativo > Settings > Secrets, adicione:
 
-```bash
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-# macOS/Linux: source .venv/bin/activate
-pip install -r requirements.txt
-streamlit run app.py
+```toml
+GOOGLE_MAPS_API_KEY = "SUA_CHAVE_PRIVADA_AQUI"
 ```
 
-Abra o endereço local exibido pelo Streamlit (normalmente http://localhost:8501).
+4. Salve Secrets, reinicie o aplicativo e teste com coordenadas não sensíveis. A chave deve permanecer confidencial.
 
-## Fluxo
+## Custos e limites
 
-1. Cole um link do Google Maps que contenha coordenadas, ou digite latitude/longitude.
-2. Consulte POIs no raio padrão de 1.000 m. Resultados dependem da cobertura do OpenStreetMap.
-3. Confira a lista, selecione registros e, se desejar, calcule percurso viário para até 15 locais selecionados.
-4. Edite textos, adicione considerandos comprovados e assinale a revisão obrigatória.
-5. Exporte o arquivo Word.
+A cobrança é por uso conforme a tabela vigente do Google Maps Platform. A pesquisa faz até uma requisição Places Nearby Search por categoria selecionada, com até 20 resultados por categoria; o botão de rotas faz até 15 requisições Routes por acionamento. Há custos mesmo que não haja resultado em alguns cenários, conforme política do provedor. Configure alertas e cotas no Google Cloud; alertas de orçamento não equivalem a limite rígido de gastos.
 
-## Fontes e limitações
+## Limitações
 
-- POIs e via: OpenStreetMap via Overpass. A natureza pública/privada não é comprovada apenas pela categoria OSM. A categoria 'Educação pública' é temática e exige validação administrativa de cada escola.
-- Distâncias em linha reta: Haversine entre coordenadas, aproximadas ao metro. Não representam distância de caminhada nem levantamento topográfico.
-- Percurso viário: serviço público OSRM de demonstração. Pode não funcionar, não representa trajetos de pedestres e não é medição pelo Google Earth.
-- Pavimentação: etiqueta `surface` do OSM, quando existente; depende de vistoria.
-- Esquina mais próxima, redes de esgoto, drenagem, iluminação e funcionamento de unidades não são determinados automaticamente nesta versão.
-- Links curtos do Google podem falhar ao resolver; nesse caso, informe as coordenadas.
-- Não há banco de dados nem salvamento permanente de modelo de considerandos; a sessão Streamlit pode manter dados temporários durante o uso.
-- Fontes de terceiros e seus termos de uso devem ser observados antes da implantação comercial.
-
-## Chaves de API e custos
-
-| Integração | Nesta versão | Chave | Custos |
-|---|---|---|---|
-| OpenStreetMap/Overpass público | Sim | Não | Sem tarifa direta, com limites e disponibilidade variável |
-| OSRM demonstração | Sim, opcional | Não | Sem tarifa direta, limitado; produção exige serviço próprio/provedor |
-| Google Maps Places/Routes/Geocoding | Não | Sim | Cobrança por consumo, faturamento Google Cloud |
-| Google Earth medição automática | Não | Não implementada | Depende de solução/licenciamento disponível |
-| Exportação Word | Sim | Não | Sem tarifa por documento |
-| Hospedagem em nuvem | Não | Conforme provedor | Pode haver cobrança |
-
-## Segurança
-
-O app não implementa autenticação, controle de acesso ou banco de dados. Para uso profissional com informações confidenciais, hospede em ambiente protegido com HTTPS, autenticação e política de retenção. Não publique dados pessoais em servidores públicos de geocodificação.
+- Somente Google Maps URLs com coordenadas explícitas ou links curtos resolvíveis. Caso contrário, informe latitude e longitude.
+- Distância em linha reta é calculada por Haversine. Percurso viário usa modo automóvel e não é medição do Google Earth.
+- Resultado do Places não comprova funcionamento, natureza pública/privada, pavimentação ou disponibilidade de serviços.
+- Os resultados por categoria são limitados a 20 e não constituem levantamento exaustivo.
+- Não há autenticação de usuários, armazenamento persistente nem gestão de dados confidenciais.
+- O aplicativo não reutiliza nem armazena o documento de exemplo enviado pelo usuário.

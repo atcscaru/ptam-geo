@@ -1,145 +1,120 @@
-"""PTAM GEO: consultas indicativas ao OpenStreetMap com redundância e fontes rastreáveis."""
+"""PTAM GEO v2: Google Places (New) and Routes APIs. No OSM dependency."""
 import math
 import re
-from urllib.parse import urlparse, unquote
+from urllib.parse import unquote, urlparse
 import requests
 
-HEADERS = {'User-Agent': 'PTAM-GEO/1.2 (geographic research; contact: repository administrator)'}
-ENDPOINTS = (
-    'https://overpass.private.coffee/api/interpreter',
-    'https://overpass.nchc.org.tw/api/interpreter',
-    'https://overpass-api.de/api/interpreter',
-)
+HEADERS = {'User-Agent': 'PTAM-GEO/2.0 (professional research application)'}
 CATEGORIES = {
-    'Educação pública': [('amenity','school'),('amenity','university'),('amenity','college'),('amenity','kindergarten')],
-    'Saúde': [('amenity','hospital'),('amenity','clinic'),('amenity','doctors'),('amenity','pharmacy')],
-    'Órgãos públicos': [('amenity','townhall'),('office','government'),('amenity','courthouse'),('amenity','police'),('amenity','post_office')],
-    'Comércio e serviços': [('shop','supermarket'),('shop','mall'),('shop','department_store'),('amenity','bank'),('amenity','atm'),('shop','convenience'),('shop','chemist'),('amenity','fuel')],
-    'Mobilidade': [('highway','bus_stop'),('public_transport','platform'),('amenity','bus_station')]
+    'Educação': ['school', 'university', 'preschool', 'primary_school', 'secondary_school'],
+    'Saúde': ['hospital', 'medical_clinic', 'doctor', 'pharmacy'],
+    'Órgãos públicos': ['city_hall', 'courthouse', 'police', 'post_office'],
+    'Comércio e serviços': ['supermarket', 'shopping_mall', 'bank', 'atm', 'gas_station'],
+    'Mobilidade': ['bus_station', 'transit_station'],
 }
 
 def parse_coordinates(value):
-    value = value.strip()
+    value = unquote(value.strip())
     if not value:
-        raise ValueError('Informe um link ou coordenadas.')
-    decoded = unquote(value)
-    patterns = [
-        r'!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)',
-        r'@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)',
-        r'[?&](?:q|query|ll)=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)',
-        r'(-?\d{1,2}(?:\.\d+)?)\s*[,;]\s*(-?\d{1,3}(?:\.\d+)?)'
-    ]
+        raise ValueError('Informe coordenadas ou um link do Google Maps.')
+    patterns = [r'!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)',
+                r'@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)',
+                r'(?:[?&](?:q|query|ll)=)(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)',
+                r'^\s*(-?\d+(?:\.\d+)?)\s*[,;]\s*(-?\d+(?:\.\d+)?)\s*$']
     for pattern in patterns:
-        match = re.search(pattern, decoded)
-        if match:
-            lat, lon = float(match[1]), float(match[2])
+        m = re.search(pattern, value)
+        if m:
+            lat, lon = map(float, m.groups())
             if -90 <= lat <= 90 and -180 <= lon <= 180:
                 return lat, lon
-            raise ValueError('Latitude ou longitude fora do intervalo permitido.')
-    raise ValueError('Não foi possível extrair coordenadas. Informe latitude e longitude no formato -8.28, -35.97.')
+            raise ValueError('Coordenadas fora dos limites geográficos.')
+    raise ValueError('Não foram encontradas coordenadas. Use latitude, longitude (ex.: -8.28, -35.97).')
 
 def resolve_input(value):
-    value = value.strip()
-    if value.startswith(('https://', 'http://')):
+    if value.strip().startswith('http'):
         host = (urlparse(value).hostname or '').lower()
-        if not (host == 'google.com' or host.endswith('.google.com') or host in ('maps.app.goo.gl', 'goo.gl')):
-            raise ValueError('Somente links do Google Maps são aceitos neste campo.')
+        if host not in {'google.com', 'maps.app.goo.gl', 'goo.gl'} and not host.endswith('.google.com'):
+            raise ValueError('Somente URLs do Google Maps ou coordenadas são aceitas.')
         try:
             return parse_coordinates(value)
         except ValueError:
             try:
-                response = requests.get(value, headers=HEADERS, timeout=(4, 9), allow_redirects=True)
-                response.raise_for_status()
-                final_host = (urlparse(response.url).hostname or '').lower()
-                if not (final_host == 'google.com' or final_host.endswith('.google.com') or final_host in ('maps.app.goo.gl', 'goo.gl')):
-                    raise ValueError('O link redirecionou para um domínio não autorizado.')
-                return parse_coordinates(response.url)
+                r = requests.get(value, headers=HEADERS, timeout=10, allow_redirects=True)
+                r.raise_for_status()
+                host_final = (urlparse(r.url).hostname or '').lower()
+                if host_final != 'google.com' and not host_final.endswith('.google.com'):
+                    raise ValueError('Redirecionamento não reconhecido.')
+                return parse_coordinates(r.url)
             except requests.RequestException as exc:
-                raise ValueError('Não foi possível abrir o link. Cole as coordenadas do Google Maps.') from exc
+                raise ValueError('Não foi possível resolver o link curto. Cole as coordenadas do Google Maps.') from exc
     return parse_coordinates(value)
 
 def haversine(a,b,c,d):
-    r=6371008.8
-    p1,p2=math.radians(a),math.radians(c)
-    dp=math.radians(c-a); dl=math.radians(d-b)
-    x=math.sin(dp/2)**2+math.cos(p1)*math.cos(p2)*math.sin(dl/2)**2
+    r = 6371008.8
+    p1, p2 = math.radians(a), math.radians(c)
+    dp, dl = math.radians(c-a), math.radians(d-b)
+    x = math.sin(dp/2)**2 + math.cos(p1)*math.cos(p2)*math.sin(dl/2)**2
     return round(2*r*math.asin(min(1,math.sqrt(x))))
 
-def _overpass(query, endpoint=None):
-    """Consultas limitadas em múltiplos provedores. Sem garantia de disponibilidade."""
-    endpoints = ([endpoint] if endpoint else []) + [e for e in ENDPOINTS if e != endpoint]
-    errors = []
-    for url in endpoints:
-        try:
-            # GET evita alguns bloqueios de POST em hospedagens compartilhadas.
-            response = requests.get(url, params={'data': query}, headers=HEADERS, timeout=(4, 12))
-            response.raise_for_status()
-            data = response.json()
-            if not isinstance(data, dict) or not isinstance(data.get('elements'), list):
-                raise ValueError('Resposta geográfica inválida')
-            return data
-        except (requests.RequestException, ValueError) as exc:
-            errors.append(f'{urlparse(url).hostname}: {type(exc).__name__}')
-    raise RuntimeError('Fontes Overpass temporariamente indisponíveis (' + '; '.join(errors) + '). Não foi possível confirmar estabelecimentos. Nenhum resultado foi inventado.')
-
-def query_osm(lat,lon,radius=1000,endpoint=None):
-    if not (-90<=lat<=90 and -180<=lon<=180):
-        raise ValueError('Coordenadas inválidas.')
-    if not 50 <= radius <= 5000:
-        raise ValueError('Raio deve estar entre 50 e 5.000 metros.')
-    pairs = sorted(set(pair for items in CATEGORIES.values() for pair in items))
-    # Uma cláusula por chave, usando regex de valores, reduz o tamanho da consulta.
-    grouped = {}
-    for k,v in pairs:
-        grouped.setdefault(k, []).append(v)
-    clauses = [f'nwr["{k}"~"^({"|".join(sorted(set(values)))})$"](around:{int(radius)},{lat},{lon});' for k,values in grouped.items()]
-    query='[out:json][timeout:12];(' + ''.join(clauses) + ');out center tags;'
-    data=_overpass(query,endpoint)
-    result=[];seen=set()
-    for el in data['elements']:
-        tags=el.get('tags',{})
-        name=tags.get('name')
-        if not name: continue
-        center=el.get('center',el)
-        a,b=center.get('lat'),center.get('lon')
-        if a is None or b is None: continue
-        distance=haversine(lat,lon,a,b)
-        if distance>radius: continue
-        cat=next((category for category,p in CATEGORIES.items() if any(tags.get(k)==v for k,v in p)),'Outros')
-        key=(el.get('type'),el.get('id'))
-        if key in seen: continue
-        seen.add(key)
-        result.append({'incluir':False,'categoria':cat,'nome':name,'distância_reta_m':distance,'distância_vias_m':None,
-            'latitude':a,'longitude':b,'fonte':f'https://www.openstreetmap.org/{el["type"]}/{el["id"]}',
-            'confiança':'Cadastro OSM não verificado', 'observação':'Confirmar nome, atividade, natureza pública/privada e funcionamento',
-            'texto_editado':''})
-    return sorted(result,key=lambda x:x['distância_reta_m'])
-
-def road_distance(lat,lon,lat2,lon2,timeout=8):
-    """OSRM público de demonstração. Distância viária aproximada, sem garantia de disponibilidade."""
-    url=f'https://router.project-osrm.org/route/v1/driving/{lon},{lat};{lon2},{lat2}'
+def _post(url, payload, key, fieldmask, timeout=25):
+    headers = {'X-Goog-Api-Key': key, 'X-Goog-FieldMask': fieldmask, 'Content-Type': 'application/json'}
     try:
-        r=requests.get(url,params={'overview':'false'},timeout=timeout,headers=HEADERS)
-        r.raise_for_status(); data=r.json()
-        if data.get('code')=='Ok' and data.get('routes'):
-            return round(data['routes'][0]['distance'])
-    except (requests.RequestException,ValueError,KeyError,IndexError):
-        pass
-    return None
+        resp = requests.post(url, json=payload, headers=headers, timeout=timeout)
+        if not resp.ok:
+            try:
+                info = resp.json().get('error', {})
+                msg = info.get('message') or f'HTTP {resp.status_code}'
+            except ValueError:
+                msg = f'HTTP {resp.status_code}'
+            raise RuntimeError(f'Google Maps API: {msg}')
+        return resp.json()
+    except requests.Timeout as exc:
+        raise RuntimeError('Tempo esgotado na consulta ao Google Maps.') from exc
+    except requests.RequestException as exc:
+        raise RuntimeError('Falha de conexão com Google Maps API.') from exc
 
-def street_context(lat,lon,radius=150,endpoint=None):
-    """Cadastro indicativo de via/superfície. Não comprova pavimentação nem esquina."""
-    query=f'[out:json][timeout:12];way["highway"]["name"](around:{int(radius)},{lat},{lon});out center tags;'
-    data=_overpass(query,endpoint)
-    roads=[]
-    for el in data['elements']:
-        tags=el.get('tags',{}); p=el.get('center',{})
-        if 'lat' in p and 'lon' in p:
-            roads.append((haversine(lat,lon,p['lat'],p['lon']),tags,el))
-    if not roads:
-        return {'logradouro':'Não identificado','pavimentação':'Não verificada','fonte':'','observação':'Confirmar por vistoria'}
-    roads.sort(key=lambda x:x[0]); _,tags,el=roads[0]
-    return {'logradouro':tags.get('name','Sem nome cadastrado'),
-            'pavimentação':tags.get('surface','Não informada no OSM'),
-            'fonte':f'https://www.openstreetmap.org/way/{el["id"]}',
-            'observação':'Dado cadastral OSM. Confirmar em vistoria; centro geométrico da via não garante a via mais próxima.'}
+def query_google(lat, lon, key, radius=1000, categories=None):
+    if not key:
+        raise ValueError('Configure GOOGLE_MAPS_API_KEY nos Secrets do Streamlit.')
+    if not 100 <= radius <= 5000:
+        raise ValueError('Raio deve estar entre 100 e 5.000 metros.')
+    categories = categories or list(CATEGORIES)
+    output, seen = [], set()
+    for cat in categories:
+        if cat not in CATEGORIES:
+            continue
+        payload = {'includedTypes': CATEGORIES[cat], 'maxResultCount': 20,
+                   'locationRestriction': {'circle': {'center': {'latitude': lat, 'longitude': lon}, 'radius': float(radius)}},
+                   'rankPreference': 'DISTANCE', 'languageCode': 'pt-BR'}
+        data = _post('https://places.googleapis.com/v1/places:searchNearby', payload, key,
+                     'places.id,places.displayName,places.location,places.formattedAddress,places.googleMapsUri,places.primaryType')
+        for p in data.get('places', []):
+            pid = p.get('id')
+            loc = p.get('location', {})
+            a, b = loc.get('latitude'), loc.get('longitude')
+            if not pid or a is None or b is None or pid in seen:
+                continue
+            d = haversine(lat, lon, a, b)
+            if d > radius:
+                continue
+            seen.add(pid)
+            output.append({'incluir': False, 'categoria': cat, 'nome': p.get('displayName', {}).get('text', 'Sem nome'),
+                'distância_reta_m': d, 'distância_vias_m': None, 'latitude': a, 'longitude': b,
+                'fonte': p.get('googleMapsUri') or f'https://www.google.com/maps/place/?q=place_id:{pid}',
+                'confiança': 'Cadastro Google Places; não comprova funcionamento ou natureza pública',
+                'observação': f"{p.get('formattedAddress','')} | Tipo: {p.get('primaryType','não informado')}. Confirmar funcionamento, titularidade e acesso.",
+                'texto_editado': ''})
+    return sorted(output, key=lambda x: x['distância_reta_m'])
+
+def road_distance(lat, lon, lat2, lon2, key, timeout=20):
+    payload = {'origin': {'location': {'latLng': {'latitude': lat, 'longitude': lon}}},
+               'destination': {'location': {'latLng': {'latitude': lat2, 'longitude': lon2}}},
+               'travelMode': 'DRIVE', 'routingPreference': 'TRAFFIC_UNAWARE', 'languageCode': 'pt-BR'}
+    data = _post('https://routes.googleapis.com/directions/v2:computeRoutes', payload, key,
+                 'routes.distanceMeters', timeout=timeout)
+    routes = data.get('routes', [])
+    return round(routes[0]['distanceMeters']) if routes else None
+
+def street_context(lat, lon):
+    return {'logradouro': 'Não verificado automaticamente', 'pavimentação': 'Não verificada',
+            'fonte': '', 'observação': 'Google Places não comprova pavimentação, drenagem, esgoto ou esquina mais próxima. Confirmar em vistoria ou cadastro oficial.'}
