@@ -4,10 +4,12 @@ import folium
 from streamlit_folium import st_folium
 from geo import resolve_input, query_google, road_distance, street_context, CATEGORIES
 from exporter import build_docx
+from infrastructure import FIELDS, build_infrastructure_considerando
+from geo import haversine
 
-st.set_page_config(page_title='PTAM GEO v2.0', page_icon='📍', layout='wide')
+st.set_page_config(page_title='PTAM GEO v2.2', page_icon='📍', layout='wide')
 st.title('PTAM GEO | Considerandos para avaliação mercadológica')
-st.caption('Versão 2.0 • Google Places e Routes • Revisão humana obrigatória • Word editável')
+st.caption('Versão 2.2 • Google Places e Routes • Revisão humana obrigatória • Word editável')
 st.warning('Os cadastros são indicativos. Não declare pavimentação, redes públicas, funcionamento de serviços, natureza pública de instituições ou esquina mais próxima sem confirmação.')
 try:
     api_key = st.secrets.get('GOOGLE_MAPS_API_KEY', '')
@@ -16,18 +18,34 @@ except Exception:
 if not api_key:
     st.error('Chave Google Maps não configurada. Adicione GOOGLE_MAPS_API_KEY aos Secrets do aplicativo no Streamlit Cloud. Não cole a chave no GitHub.')
 
+# Contador preventivo por sessão: NÃO é limite mensal global nem bloqueio de cobrança.
+if 'api_usage' not in st.session_state:
+    st.session_state.api_usage = {'places': 0, 'routes': 0}
+SESSION_PLACES_CAP = 20
+SESSION_ROUTES_CAP = 30
+
 with st.sidebar:
     st.header('Configurações')
     radius = st.number_input('Raio de pesquisa (metros)', min_value=100, max_value=5000, value=1000, step=100)
     categories = st.multiselect('Categorias', list(CATEGORIES), default=list(CATEGORIES))
     routing = st.checkbox('Permitir cálculo de distância viária (Google Routes)', value=True)
     st.caption('Cada categoria consulta Google Places. Cada rota selecionada gera uma requisição adicional faturável.')
+    st.metric('Places nesta sessão', f"{st.session_state.api_usage['places']}/{SESSION_PLACES_CAP}")
+    st.metric('Routes nesta sessão', f"{st.session_state.api_usage['routes']}/{SESSION_ROUTES_CAP}")
+    st.warning('Limites acima valem apenas para esta sessão. Reiniciar o aplicativo ou abrir outra sessão zera os contadores. Para limite efetivo, configure cotas no Google Cloud.')
 
 link = st.text_input('Link Google Maps ou coordenadas (latitude, longitude)', placeholder='https://www.google.com/maps/... ou -8.28, -35.97')
 address = st.text_input('Identificação do imóvel (opcional)', placeholder='Rua, número, bairro, cidade e UF')
 
 if st.button('Pesquisar localização e estabelecimentos', type='primary', disabled=not bool(api_key)):
     try:
+        expected = len([c for c in categories if c in CATEGORIES])
+        if expected == 0:
+            raise ValueError('Selecione ao menos uma categoria.')
+        if st.session_state.api_usage['places'] + expected > SESSION_PLACES_CAP:
+            raise ValueError('Limite preventivo de consultas Places nesta sessão atingido. Verifique as cotas do Google Cloud antes de continuar.')
+        # Reserva antecipada: falhas e resultados vazios também podem ser faturáveis.
+        st.session_state.api_usage['places'] += expected
         lat, lon = resolve_input(link)
         with st.spinner('Consultando Google Places...'):
             rows = query_google(lat, lon, api_key, radius, categories)
@@ -53,51 +71,105 @@ if 'rows' in st.session_state:
     if df.empty:
         df=pd.DataFrame(columns=cols)
         st.info('Nenhum registro encontrado. Isso não significa ausência de serviços na região.')
+    st.subheader('Conferência do ponto do imóvel')
+    st.caption('Confirme o ponto exato do imóvel. Um link do Google Maps pode conter o centro do mapa, e não a posição do imóvel.')
+    origin_lat = st.number_input('Latitude confirmada do imóvel', min_value=-90.0, max_value=90.0, value=float(lat), format='%.7f', key='origin_lat')
+    origin_lon = st.number_input('Longitude confirmada do imóvel', min_value=-180.0, max_value=180.0, value=float(lon), format='%.7f', key='origin_lon')
+    st.info('As coordenadas de cada estabelecimento estão disponíveis para edição na tabela. Ajuste-as para o ponto verificado, preferencialmente a entrada principal. O Google Places pode indicar apenas o centro do estabelecimento.')
     st.subheader('Seleção e conferência')
     st.caption('Selecione os registros e revise os dados. A pesquisa limita a 20 resultados por categoria; não é levantamento exaustivo.')
     edited=st.data_editor(df[cols], num_rows='dynamic', use_container_width=True, hide_index=True,
-        column_config={'latitude':None,'longitude':None,'fonte':st.column_config.LinkColumn('Fonte'),
+        column_config={'latitude':st.column_config.NumberColumn('Latitude do destino',format='%.7f'), 'longitude':st.column_config.NumberColumn('Longitude do destino',format='%.7f'),'fonte':st.column_config.LinkColumn('Fonte'),
             'incluir':st.column_config.CheckboxColumn('Incluir'),
             'distância_reta_m':st.column_config.NumberColumn('Linha reta (m)'),
             'distância_vias_m':st.column_config.NumberColumn('Via (m)'),
             'texto_editado':st.column_config.TextColumn('Considerando revisado',width='large')}, key='editor_v2')
+    if st.button('Recalcular linhas retas com coordenadas conferidas'):
+        updated=edited.to_dict('records')
+        for r in updated:
+            if pd.notna(r.get('latitude')) and pd.notna(r.get('longitude')):
+                a,b=float(r['latitude']),float(r['longitude'])
+                if not (-90<=a<=90 and -180<=b<=180):
+                    st.error('Coordenadas de destino inválidas.');st.stop()
+                r['distância_reta_m']=haversine(origin_lat,origin_lon,a,b)
+                r['distância_vias_m']=None  # não conservar rota de pontos antigos
+        st.session_state.rows=updated
+        st.session_state.lat,st.session_state.lon=origin_lat,origin_lon
+        st.rerun()
+    if (origin_lat,origin_lon)!=(lat,lon):
+        st.warning('O ponto do imóvel foi alterado. Recalcule as linhas retas antes de calcular rotas ou exportar.')
     if st.button('Calcular distâncias viárias dos selecionados', disabled=not routing):
         updated=edited.to_dict('records')
+        if (origin_lat,origin_lon)!=(lat,lon):
+            st.error('Recalcule as linhas retas com a nova origem antes das rotas.');st.stop()
         selected=[r for r in updated if r.get('incluir')]
-        if len(selected)>15:
-            st.warning('Selecione até 15 registros para controlar custos e evitar consultas excessivas.')
+        for r in selected:
+            if pd.notna(r.get('latitude')) and pd.notna(r.get('longitude')):
+                expected=haversine(lat,lon,float(r['latitude']),float(r['longitude']))
+                if pd.isna(r.get('distância_reta_m')) or abs(float(r['distância_reta_m'])-expected)>1:
+                    st.error('Coordenadas alteradas: recalcule primeiro as distâncias em linha reta.');st.stop()
+        if len(selected)>10:
+            st.warning('Selecione até 10 registros por lote para controlar custos.')
+        elif st.session_state.api_usage['routes'] + len(selected) > SESSION_ROUTES_CAP:
+            st.warning('Limite preventivo de rotas nesta sessão atingido. Consulte o painel de faturamento do Google Cloud.')
         elif not selected:
             st.warning('Selecione pelo menos um registro.')
         else:
+            st.session_state.api_usage['routes'] += len(selected)
             with st.spinner('Calculando percursos pelo Google Routes...'):
                 failures=0
                 for r in updated:
                     if r.get('incluir') and pd.notna(r.get('latitude')) and pd.notna(r.get('longitude')):
                         try:
-                            r['distância_vias_m']=road_distance(lat,lon,float(r['latitude']),float(r['longitude']),api_key)
+                            r['distância_vias_m']=road_distance(origin_lat,origin_lon,float(r['latitude']),float(r['longitude']),api_key)
                         except Exception:
                             failures+=1
                             r['distância_vias_m']=None
             st.session_state.rows=updated
             if failures:st.warning(f'{failures} percurso(s) indisponível(is). Não foram inventadas distâncias.')
             st.rerun()
+    st.subheader('Infraestrutura verificada: imóvel e logradouro')
+    st.caption('Preenchimento manual. Não verificado não será declarado no considerando. Separe a existência da rede no logradouro da ligação efetiva no imóvel.')
+    infra={'logradouro':{},'imovel':{}}
+    with st.expander('Informar condições de infraestrutura', expanded=True):
+        for field, choices in FIELDS.items():
+            a,b=st.columns(2)
+            with a:
+                infra['logradouro'][field]=st.selectbox(f'{field} | Logradouro',choices,index=len(choices)-1,key='infra_rua_'+field)
+            with b:
+                infra['imovel'][field]=st.selectbox(f'{field} | Imóvel',choices,index=len(choices)-1,key='infra_imovel_'+field)
+        infra_source=st.text_input('Fonte da informação (obrigatória se houver características declaradas)',placeholder='Ex.: vistoria realizada em DD/MM/AAAA; informação fornecida pela concessionária...',key='infra_source')
+        try:
+            infra_text=build_infrastructure_considerando(infra,infra_source) if infra_source.strip() else ''
+        except ValueError:
+            infra_text=''
+        if infra_text: st.text_area('Considerando único gerado',value=infra_text,height=160,disabled=True)
     st.subheader('Complementos e validação profissional')
     notes=st.text_area('Considerandos adicionais confirmados pelo avaliador', height=130,
                        placeholder='Descreva apenas características verificadas, com indicação da fonte ou vistoria.')
     verified=st.checkbox('Conferi os registros, as distâncias, as fontes e o texto. Autorizo a exportação após revisão humana.', value=False)
     if verified:
+        if (origin_lat,origin_lon)!=(lat,lon):
+            st.error('Recalcule as distâncias com as coordenadas confirmadas antes de exportar.');st.stop()
+        if any(v!='Não verificado' for section in infra.values() for v in section.values()) and not infra_source.strip():
+            st.error('Informe a fonte das condições de infraestrutura antes de exportar.');st.stop()
         selected=edited.to_dict('records')
+        for row in selected:
+            if pd.notna(row.get('latitude')) and pd.notna(row.get('longitude')):
+                expected=haversine(lat,lon,float(row['latitude']),float(row['longitude']))
+                if row.get('distância_reta_m') is not None and pd.notna(row.get('distância_reta_m')) and abs(float(row['distância_reta_m'])-expected)>1:
+                    st.error('A distância em linha reta não corresponde às coordenadas editadas. Clique em Recalcular linhas retas.');st.stop()
         for r in selected:
             for k in ('distância_reta_m','distância_vias_m'):
                 if pd.isna(r.get(k)):r[k]=None
             if pd.isna(r.get('texto_editado')):r['texto_editado']=''
-        if not any(r.get('incluir') for r in selected) and not notes.strip():
+        if not any(r.get('incluir') for r in selected) and not notes.strip() and not infra_text:
             st.warning('Selecione registros ou informe considerandos confirmados.')
         else:
-            content=build_docx(address or st.session_state.query_address,lat,lon,selected,road,notes,
+            content=build_docx(address or st.session_state.query_address,lat,lon,selected,road,notes,infra_text=infra_text,
                 method='Linha reta geodésica e, quando disponível, percurso viário pelo Google Routes (modo automóvel)')
             st.download_button('Exportar considerandos em Word (.docx)',content,'PTAM_GEO_Considerandos.docx',
                 mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
 
 with st.expander('Integrações, privacidade e custos'):
-    st.markdown('''**Google Places API (New):** requer chave de API, faturamento habilitado e cobra conforme requisições e campos solicitados. **Google Routes API:** requer chave e faturamento; cada percurso pode gerar cobrança. **Distância em linha reta:** calculada localmente, sem cobrança adicional. **Google Earth:** não integrado; não se afirma que a distância foi medida nele. **Pavimentação, esgoto, iluminação, esquina mais próxima e natureza pública dos serviços:** exigem vistoria ou cadastro oficial. **Exportação Word:** sem tarifa por documento nesta implementação. **Segurança:** a chave deve ficar nos Secrets do Streamlit, nunca no código ou no GitHub. A hospedagem pública não possui login próprio; não insira dados pessoais confidenciais. As coordenadas são transmitidas às APIs do Google. Consulte os termos e preços vigentes no Google Maps Platform.''')
+    st.markdown('''**Controle de custos:** até 20 consultas Places e 30 Routes por sessão. Esses limites não são globais, não persistem e não impedem cobranças de outras sessões. Use cotas e monitoramento no Google Cloud. **Google Places API (New):** requer chave de API, faturamento habilitado e cobra conforme requisições e campos solicitados. **Google Routes API:** requer chave e faturamento; cada percurso pode gerar cobrança. **Distância em linha reta:** calculada localmente, sem cobrança adicional. **Google Earth:** não integrado; não se afirma que a distância foi medida nele. **Pavimentação, esgoto, iluminação, esquina mais próxima e natureza pública dos serviços:** exigem vistoria ou cadastro oficial. **Exportação Word:** sem tarifa por documento nesta implementação. **Segurança:** a chave deve ficar nos Secrets do Streamlit, nunca no código ou no GitHub. A hospedagem pública não possui login próprio; não insira dados pessoais confidenciais. As coordenadas são transmitidas às APIs do Google. Consulte os termos e preços vigentes no Google Maps Platform.''')

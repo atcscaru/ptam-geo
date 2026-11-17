@@ -6,7 +6,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 
 
-def build_docx(address,lat,lon,rows,road,notes,method='Linha reta geodésica e, quando disponível, percurso viário'):
+def build_docx(address,lat,lon,rows,road,notes,method='Linha reta geodésica e, quando disponível, percurso viário',infra_text=''):
     doc=Document();sec=doc.sections[0]
     sec.top_margin=Cm(3);sec.left_margin=Cm(3);sec.bottom_margin=Cm(2);sec.right_margin=Cm(2)
     normal=doc.styles['Normal'];normal.font.name='Times New Roman';normal.font.size=Pt(12)
@@ -17,9 +17,9 @@ def build_docx(address,lat,lon,rows,road,notes,method='Linha reta geodésica e, 
     para('PTAM GEO | Pesquisa geográfica preliminar com revisão do avaliador')
     para(f'Imóvel de referência: {address or "Localização por coordenadas"}. Coordenadas: {lat:.7f}, {lon:.7f}. Data da pesquisa: {date.today():%d/%m/%Y}.')
     doc.add_heading('Considerandos',level=1)
-    if road and road.get('logradouro') and road.get('logradouro')!='Não identificado':
-        para(f'Considerando que o imóvel está localizado nas proximidades do logradouro {road["logradouro"]}, conforme identificação cartográfica do OpenStreetMap, sujeita a confirmação no local;')
-    if road and road.get('pavimentação') and road.get('pavimentação')!='Não informada no OSM':
+    if road and road.get('logradouro') and road.get('logradouro') not in ('Não identificado', 'Não verificado automaticamente'):
+        para(f'Considerando que o imóvel está localizado nas proximidades do logradouro {road["logradouro"]}, conforme fonte cartográfica informada, sujeita a confirmação no local;')
+    if road and road.get('pavimentação') and road.get('pavimentação') not in ('Não informada no OSM', 'Não verificada'):
         para(f'Considerando que o cadastro cartográfico indica pavimentação do tipo “{road["pavimentação"]}” na via identificada, informação que depende de vistoria física para confirmação;')
     for row in rows:
         if not row.get('incluir'):continue
@@ -31,12 +31,14 @@ def build_docx(address,lat,lon,rows,road,notes,method='Linha reta geodésica e, 
             if v is not None:metrics+=f' e {v} metros por percurso viário estimado'
             s=f'Considerando que, na categoria {row.get("categoria", "serviços")}, consta o estabelecimento {row.get("nome", "não identificado")}, situado {metrics}, conforme cadastro geográfico consultado, sujeito a confirmação de funcionamento e localização;'
         para(s)
+    if infra_text:
+        para(infra_text)
     if notes.strip():
         doc.add_heading('Informações complementares validadas pelo avaliador',level=1)
         for line in notes.splitlines():
             if line.strip():para(line.strip())
     doc.add_heading('Critérios, fontes e limitações',level=1)
-    para(f'As distâncias em linha reta foram calculadas pela fórmula geodésica de Haversine, entre as coordenadas do imóvel e os pontos cadastrados. {method}. As distâncias viárias, quando disponíveis, são estimativas de roteamento, não medições certificadas pelo Google Earth. Os cadastros do OpenStreetMap são colaborativos e podem estar incompletos ou desatualizados. A proximidade de uma instalação não comprova seu funcionamento, natureza jurídica, acesso ou infraestrutura efetivamente disponível no imóvel.')
+    para(f'As distâncias em linha reta foram calculadas pela fórmula geodésica de Haversine, entre as coordenadas do imóvel e os pontos cadastrados. {method}. As distâncias viárias, quando disponíveis, são estimativas de roteamento, não medições certificadas pelo Google Earth. Os cadastros do Google Places podem estar incompletos ou desatualizados e não comprovam a natureza pública ou privada do estabelecimento. A proximidade de uma instalação não comprova seu funcionamento, natureza jurídica, acesso ou infraestrutura efetivamente disponível no imóvel.')
     para('A pavimentação, a existência de esgotamento sanitário, drenagem, iluminação pública e a identificação da esquina mais próxima exigem confirmação documental ou vistoria. Não foram presumidas características ausentes das fontes.')
     para('Documento auxiliar de pesquisa para subsidiar PTAM extrajudicial. Não constitui, isoladamente, parecer técnico completo, nem substitui a responsabilidade profissional do avaliador. Uso restrito ao destinatário autorizado. Evitar a inserção de dados pessoais desnecessários.')
     doc.add_heading('Rastreabilidade dos registros selecionados',level=1)
