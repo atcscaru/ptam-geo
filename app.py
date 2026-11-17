@@ -7,9 +7,41 @@ from exporter import build_docx
 from infrastructure import FIELDS, build_infrastructure_considerando
 from geo import haversine
 
-st.set_page_config(page_title='PTAM GEO v2.3', page_icon='📍', layout='wide')
+st.set_page_config(page_title='PTAM GEO v2.4', page_icon='📍', layout='wide')
+
+# Autenticação obrigatória antes de qualquer consulta, dado do imóvel ou mapa.
+# Configure [auth] e ALLOWED_GOOGLE_EMAIL em Streamlit Cloud > Settings > Secrets.
+try:
+    allowed_email = str(st.secrets.get('ALLOWED_GOOGLE_EMAIL', '')).strip().casefold()
+except Exception:
+    allowed_email = ''
+
+if not allowed_email:
+    st.error('Acesso bloqueado: configure ALLOWED_GOOGLE_EMAIL nos Secrets do Streamlit.')
+    st.stop()
+
+if not st.user.is_logged_in:
+    st.title('PTAM GEO | Acesso restrito')
+    st.write('Entre com a conta Google autorizada para utilizar o aplicativo.')
+    if st.button('Entrar com Google', type='primary'):
+        st.login('google')
+    st.stop()
+
+current_email = str(st.user.get('email', '')).strip().casefold()
+email_verified = st.user.get('email_verified', False)
+if current_email != allowed_email or email_verified is not True:
+    st.error('Esta conta Google não está autorizada a utilizar o PTAM GEO.')
+    if st.button('Sair da conta Google'):
+        st.logout()
+    st.stop()
+
+with st.sidebar:
+    st.caption('Acesso autorizado')
+    if st.button('Sair', key='logout'):
+        st.logout()
+
 st.title('PTAM GEO | Considerandos para avaliação mercadológica')
-st.caption('Versão 2.3 • Google Places e Routes • Revisão humana obrigatória • Word editável')
+st.caption('Versão 2.4 • Acesso Google restrito • Google Places e Routes • Revisão humana obrigatória • Word editável')
 st.warning('Os cadastros são indicativos. Não declare pavimentação, redes públicas, funcionamento de serviços, natureza pública de instituições ou esquina mais próxima sem confirmação.')
 try:
     api_key = st.secrets.get('GOOGLE_MAPS_API_KEY', '')
