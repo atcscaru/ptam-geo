@@ -41,3 +41,12 @@ Substituir `app.py`, `geo.py`, `exporter.py`, `requirements.txt`, `README.md` no
 
 ## Limitações
 Não houve teste real com chave de API; testes realizados são de sintaxe e inspeção estática. Sem login, banco de dados de uso global, controle mensal persistente ou garantia de custo zero. Revisão humana continua obrigatória.
+
+
+## Versão 2.5: modo manual e distâncias viárias
+- Selecione **Cadastro manual sem localização eletrônica** quando não houver coordenadas confiáveis. Adicione os pontos relevantes, digite nome, categoria, distância viária aproximada (em metros), fonte e marque Incluir.
+- A distância viária é a única distância apresentada nos considerandos e na rastreabilidade do Word. A distância em linha reta permanece como cálculo interno.
+- Na pesquisa automática, a opção **Preservar distância conferida** evita substituir uma distância revisada manualmente ao calcular novas rotas.
+- Use **Salvar alterações da tabela** para consolidar as edições na sessão. O app não salva registros permanentemente; exporte o Word antes de fechar.
+- A fonte da distância e a fonte documental do registro devem ser informadas. Não declare precisão certificada nem trajeto validado automaticamente para valores manuais.
+- O login Google e os Secrets permanecem inalterados.

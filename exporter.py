@@ -15,7 +15,7 @@ def build_docx(address,lat,lon,rows,road,notes,method='Linha reta geodésica e, 
         p=doc.add_paragraph(s);p.alignment=WD_ALIGN_PARAGRAPH.JUSTIFY;return p
     h=doc.add_heading('CONSIDERANDOS DA ANÁLISE MERCADOLÓGICA',0);h.alignment=WD_ALIGN_PARAGRAPH.CENTER
     para('PTAM GEO | Pesquisa geográfica preliminar com revisão do avaliador')
-    para(f'Imóvel de referência: {address or "Localização por coordenadas"}. Coordenadas: {lat:.7f}, {lon:.7f}. Data da pesquisa: {date.today():%d/%m/%Y}.')
+    para(f'Imóvel de referência: {address or "Imóvel informado pelo avaliador"}.' + (f' Coordenadas confirmadas: {lat:.7f}, {lon:.7f}.' if lat is not None and lon is not None else ' Localização geográfica eletrônica não informada.') + f' Data da pesquisa: {date.today():%d/%m/%Y}.')
     doc.add_heading('Considerandos',level=1)
     if road and road.get('logradouro') and road.get('logradouro') not in ('Não identificado', 'Não verificado automaticamente'):
         para(f'Considerando que o imóvel está localizado nas proximidades do logradouro {road["logradouro"]}, conforme fonte cartográfica informada, sujeita a confirmação no local;')
@@ -26,15 +26,16 @@ def build_docx(address,lat,lon,rows,road,notes,method='Linha reta geodésica e, 
         if row.get('texto_editado','').strip():
             s=row['texto_editado'].strip()
         else:
-            d=row.get('distância_reta_m');v=row.get('distância_vias_m')
-            metrics=f'a aproximadamente {d} metros em linha reta' if d is not None else 'nas proximidades'
-            if v is not None:metrics+=f' e {v} metros por percurso viário estimado'
+            v=row.get('distância_vias_m')
+            metrics=(f'a aproximadamente {float(v):g} metros por percurso viário' if v is not None else 'nas proximidades')
+            source_distance=row.get('origem_distancia') or 'Fonte não especificada'
+            metrics+=f' (fonte da distância: {source_distance})' if v is not None else ''
             if row.get('categoria') == 'Cemitérios':
                 nature = row.get('natureza_cemiterio', 'Não verificada')
                 qualifier = ('público' if nature == 'Público' else 'privado' if nature == 'Privado' else 'de natureza administrativa não verificada')
-                s=f'Considerando que, no entorno do imóvel avaliando, foi identificado o cemitério {row.get("nome", "não identificado")}, {qualifier}, localizado {metrics}, conforme cadastro geográfico consultado, com localização, acesso e natureza sujeitos à conferência documental ou em vistoria;'
+                s=f'Considerando que, no entorno do imóvel avaliando, foi identificado o cemitério {row.get("nome", "não identificado")}, {qualifier}, localizado {metrics}, conforme levantamento informado e conferido pelo avaliador, com localização, acesso e natureza sujeitos à confirmação documental ou em vistoria;'
             else:
-                s=f'Considerando que, na categoria {row.get("categoria", "serviços")}, consta o estabelecimento {row.get("nome", "não identificado")}, situado {metrics}, conforme cadastro geográfico consultado, sujeito a confirmação de funcionamento e localização;'
+                s=f'Considerando que, na categoria {row.get("categoria", "serviços")}, consta o estabelecimento {row.get("nome", "não identificado")}, situado {metrics}, conforme fonte indicada no levantamento, sujeito a confirmação de funcionamento e localização;'
         para(s)
     if infra_text:
         para(infra_text)
@@ -43,16 +44,16 @@ def build_docx(address,lat,lon,rows,road,notes,method='Linha reta geodésica e, 
         for line in notes.splitlines():
             if line.strip():para(line.strip())
     doc.add_heading('Critérios, fontes e limitações',level=1)
-    para(f'As distâncias em linha reta foram calculadas pela fórmula geodésica de Haversine, entre as coordenadas do imóvel e os pontos cadastrados. {method}. As distâncias viárias, quando disponíveis, são estimativas de roteamento, não medições certificadas pelo Google Earth. Os cadastros do Google Places podem estar incompletos ou desatualizados e não comprovam a natureza pública ou privada do estabelecimento. A proximidade de uma instalação não comprova seu funcionamento, natureza jurídica, acesso ou infraestrutura efetivamente disponível no imóvel.')
+    para(f'{method}. As distâncias viárias são aproximadas e dependem do ponto de acesso, sentido de circulação e rota adotada. Medições manuais não foram automaticamente verificadas pelo sistema. O cadastro Google Places pode estar incompleto ou desatualizado; a proximidade não comprova funcionamento, natureza jurídica ou infraestrutura efetivamente disponível.')
     para('A pavimentação, a existência de esgotamento sanitário, drenagem, iluminação pública e a identificação da esquina mais próxima exigem confirmação documental ou vistoria. Não foram presumidas características ausentes das fontes.')
     para('Documento auxiliar de pesquisa para subsidiar PTAM extrajudicial. Não constitui, isoladamente, parecer técnico completo, nem substitui a responsabilidade profissional do avaliador. Uso restrito ao destinatário autorizado. Evitar a inserção de dados pessoais desnecessários.')
     doc.add_heading('Rastreabilidade dos registros selecionados',level=1)
     t=doc.add_table(rows=1,cols=4);t.style='Table Grid';t.alignment=WD_TABLE_ALIGNMENT.CENTER
-    for cell,label in zip(t.rows[0].cells,['Estabelecimento','Dist. reta','Dist. via','Fonte / confiabilidade']):cell.text=label
+    for cell,label in zip(t.rows[0].cells,['Estabelecimento','Distância viária','Origem da medição','Fonte / observação']):cell.text=label
     for row in rows:
         if row.get('incluir'):
             cells=t.add_row().cells
-            for cell,value in zip(cells,[row.get('nome',''),str(row.get('distância_reta_m',''))+' m',str(row.get('distância_vias_m') or 'Não disponível'),row.get('fonte','')+' | '+row.get('confiança','')]):cell.text=str(value)
+            for cell,value in zip(cells,[row.get('nome',''),(f"{float(row['distância_vias_m']):g} m" if row.get('distância_vias_m') is not None else 'Não disponível'),row.get('origem_distancia') or 'Não informada',str(row.get('fonte') or '')+' | '+str(row.get('observação') or '')]):cell.text=str(value)
     if road and road.get('fonte'):para('Fonte da via: '+road['fonte'])
     para('Conferência e aprovação técnica pelo avaliador: __________________________________')
     b=BytesIO();doc.save(b);return b.getvalue()
