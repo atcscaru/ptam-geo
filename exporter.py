@@ -6,7 +6,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 
 
-def build_docx(address,lat,lon,rows,road,notes,method='Linha reta geodésica e, quando disponível, percurso viário',infra_text=''):
+def build_docx(address,lat,lon,rows,road,notes,method='Linha reta geodésica e, quando disponível, percurso a pé por logradouros públicos',infra_text=''):
     doc=Document();sec=doc.sections[0]
     sec.top_margin=Cm(3);sec.left_margin=Cm(3);sec.bottom_margin=Cm(2);sec.right_margin=Cm(2)
     normal=doc.styles['Normal'];normal.font.name='Times New Roman';normal.font.size=Pt(12)
@@ -27,7 +27,7 @@ def build_docx(address,lat,lon,rows,road,notes,method='Linha reta geodésica e, 
             s=row['texto_editado'].strip()
         else:
             v=row.get('distância_vias_m')
-            metrics=(f'a aproximadamente {float(v):g} metros por percurso viário' if v is not None else 'nas proximidades')
+            metrics=(f'a aproximadamente {float(v):g} metros por percurso a pé por logradouros públicos' if v is not None else 'nas proximidades')
             source_distance=row.get('origem_distancia') or 'Fonte não especificada'
             metrics+=f' (fonte da distância: {source_distance})' if v is not None else ''
             if row.get('categoria') == 'Cemitérios':
@@ -44,12 +44,12 @@ def build_docx(address,lat,lon,rows,road,notes,method='Linha reta geodésica e, 
         for line in notes.splitlines():
             if line.strip():para(line.strip())
     doc.add_heading('Critérios, fontes e limitações',level=1)
-    para(f'{method}. As distâncias viárias são aproximadas e dependem do ponto de acesso, sentido de circulação e rota adotada. Medições manuais não foram automaticamente verificadas pelo sistema. O cadastro Google Places pode estar incompleto ou desatualizado; a proximidade não comprova funcionamento, natureza jurídica ou infraestrutura efetivamente disponível.')
+    para(f'{method}. As distâncias por percurso a pé são aproximadas e dependem do ponto de acesso, trajeto adotado e acessos permitidos. As medições e os trajetos foram declarados conferidos pelo avaliador; o sistema não comprova automaticamente a exclusão de becos, vielas ou atalhos. O cadastro Google Places pode estar incompleto ou desatualizado; a proximidade não comprova funcionamento, natureza jurídica ou infraestrutura efetivamente disponível.')
     para('A pavimentação, a existência de esgotamento sanitário, drenagem, iluminação pública e a identificação da esquina mais próxima exigem confirmação documental ou vistoria. Não foram presumidas características ausentes das fontes.')
     para('Documento auxiliar de pesquisa para subsidiar PTAM extrajudicial. Não constitui, isoladamente, parecer técnico completo, nem substitui a responsabilidade profissional do avaliador. Uso restrito ao destinatário autorizado. Evitar a inserção de dados pessoais desnecessários.')
     doc.add_heading('Rastreabilidade dos registros selecionados',level=1)
     t=doc.add_table(rows=1,cols=4);t.style='Table Grid';t.alignment=WD_TABLE_ALIGNMENT.CENTER
-    for cell,label in zip(t.rows[0].cells,['Estabelecimento','Distância viária','Origem da medição','Fonte / observação']):cell.text=label
+    for cell,label in zip(t.rows[0].cells,['Estabelecimento','Percurso a pé (m)','Origem da medição','Fonte / observação']):cell.text=label
     for row in rows:
         if row.get('incluir'):
             cells=t.add_row().cells

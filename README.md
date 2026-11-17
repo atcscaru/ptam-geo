@@ -1,52 +1,7 @@
-## Novidade v2.3: cemitérios no raio de pesquisa
+## PTAM GEO v2.6: percurso a pé por logradouros públicos
 
-A categoria **Cemitérios** consulta o tipo `cemetery` da Places API (New) dentro do raio configurado. Resultados podem estar ausentes ou incompletos; o limite por categoria é de 20. O avaliador seleciona cada cemitério e informa sua natureza pública ou privada somente após comprovação. Se não verificada, o Word explicita essa limitação. O custo preventivo passa a considerar seis categorias por pesquisa quando todas estiverem selecionadas.
+O Google Routes agora consulta o modo `WALK`, não automóvel. O critério adotado é o menor percurso a pé por ruas, avenidas, travessas e demais logradouros públicos regulares identificados no mapa. Não utilizar becos, vielas, atalhos por terrenos ou travessias não oficiais de cursos d’água. Pontes e travessias oficiais de pedestres integradas aos logradouros são admitidas.
 
-# PTAM GEO v2.2 | Infraestrutura e conferência de coordenadas
+**Limitação:** a API Google Routes não permite proibir automaticamente todas essas passagens. O avaliador deve conferir o trajeto, corrigir manualmente a distância quando necessário, registrar fonte e marcar **Trajeto por logradouros conferido**. A exportação de registros selecionados fica bloqueada sem essa validação. O botão de cálculo desmarca a conferência das rotas recalculadas.
 
-Esta versão acrescenta formulário manual separado para **logradouro** e **imóvel avaliando** sobre pavimentação, abastecimento de água, saneamento/drenagem, esgotamento sanitário, energia elétrica e telefonia. Gera **um único considerando** no Word editável, com fonte obrigatória. Itens não verificados são omitidos.
-
-Também permite editar a origem e as coordenadas dos estabelecimentos. Use **Recalcular linhas retas com coordenadas conferidas** antes de calcular rotas e exportar. A edição invalida rotas anteriores; o novo cálculo viário usa as coordenadas confirmadas. A posição do Google Places pode ser o centro da edificação, e não a entrada. A distância viária da Routes API pode diferir de uma medição manual no Earth devido a acesso e regras de trânsito.
-
-**Atenção:** não há verificação automática da infraestrutura nem garantia de exatidão de coordenadas. O avaliador deve conferir no mapa/vistoria e aprovar os considerandos. Os limites de consumo continuam por sessão e não impedem cobrança global.
-
-## Atualização
-
-No repositório GitHub do PTAM GEO, substitua `app.py`, `geo.py`, `exporter.py`, `requirements.txt` e `README.md`, e **adicione** `infrastructure.py`. Faça commit e aguarde a atualização do Streamlit. A chave permanece em Secrets como `GOOGLE_MAPS_API_KEY`; não a inclua no GitHub.
-
-# PTAM GEO v2.1 — revisão de APIs e controle preventivo de consumo
-
-## Auditoria do código v2.0
-- `query_google` chama `places.googleapis.com/v1/places:searchNearby` **uma vez por categoria** (5 categorias padrão), com `maxResultCount=20`. A máscara de campos é `places.id,places.displayName,places.location,places.formattedAddress,places.googleMapsUri,places.primaryType`. O SKU exato e a tarifa devem ser confirmados na tabela atual e no painel de faturamento, pois os campos solicitados determinam a modalidade. Não presumir SKU Essentials.
-- `road_distance` chama `routes.googleapis.com/directions/v2:computeRoutes` **uma vez por estabelecimento selecionado** (até 15 por clique na v2.0), com `travelMode=DRIVE`, `routingPreference=TRAFFIC_UNAWARE` e máscara `routes.distanceMeters`. Confirmar SKU no painel.
-- `haversine` é cálculo local, sem requisição externa. `street_context` não consulta API e não verifica pavimentação.
-- A pesquisa Nearby retorna até 20 estabelecimentos por categoria e não é exaustiva.
-- O arquivo `exporter.py` da v2.0 ainda mencionava OSM incorretamente; corrigido na v2.1.
-
-## Controles da v2.1
-- Limites **por sessão**: 20 consultas Places e 30 Routes. Cada clique de pesquisa reserva 1 consulta por categoria selecionada, inclusive quando houver falha; cada clique de rotas reserva 1 por registro selecionado. Máximo 10 rotas por clique.
-- Estes limites **não são mensais nem globais**. Várias pessoas, abas ou reinicializações podem excedê-los. Não constituem garantia de custo zero.
-- Recomenda-se, para até 100 avaliações/mês com cinco categorias e até 10 rotas por avaliação, estimar 500 solicitações Nearby e 1.000 solicitações Routes/mês, antes de pesquisas repetidas, erros ou testes.
-
-## Configuração obrigatória no Google Cloud (antes de ativar uso)
-1. Ativar apenas **Places API (New)** e **Routes API**. Não ativar serviços adicionais desnecessários.
-2. Em **APIs e serviços > Cotas e limites do sistema**, configurar cotas diárias conservadoras nas métricas aplicáveis, quando editáveis. Começar com 25 solicitações Places/dia e 50 Routes/dia, e ajustar conforme uso real. Cotas podem ter granularidade distinta e algumas não são configuráveis.
-3. Em **Faturamento > Orçamentos e alertas**, criar orçamento baixo (por exemplo R$ 20/mês) com alertas em 50%, 90% e 100%. Alertas NÃO bloqueiam cobranças.
-4. Criar chave de API com **restrição às APIs Places API (New) e Routes API**. Para app Streamlit no servidor, a restrição por HTTP referrer normalmente não protege chamadas de backend; restrição por IP requer IP de saída fixo. Se a hospedagem não oferecer IP estável, proteja a chave em Secrets e monitore consumo.
-5. Streamlit Cloud > App > Settings > Secrets: `GOOGLE_MAPS_API_KEY = "..."`. Nunca colocar chave no GitHub, screenshots ou chat.
-6. Em **Faturamento > Relatórios**, conferir SKUs realmente cobrados após 1 pesquisa e 1 rota. Só então ampliar uso.
-
-## Publicação
-Substituir `app.py`, `geo.py`, `exporter.py`, `requirements.txt`, `README.md` no repositório já conectado ao Streamlit. Não é necessário criar novo link.
-
-## Limitações
-Não houve teste real com chave de API; testes realizados são de sintaxe e inspeção estática. Sem login, banco de dados de uso global, controle mensal persistente ou garantia de custo zero. Revisão humana continua obrigatória.
-
-
-## Versão 2.5: modo manual e distâncias viárias
-- Selecione **Cadastro manual sem localização eletrônica** quando não houver coordenadas confiáveis. Adicione os pontos relevantes, digite nome, categoria, distância viária aproximada (em metros), fonte e marque Incluir.
-- A distância viária é a única distância apresentada nos considerandos e na rastreabilidade do Word. A distância em linha reta permanece como cálculo interno.
-- Na pesquisa automática, a opção **Preservar distância conferida** evita substituir uma distância revisada manualmente ao calcular novas rotas.
-- Use **Salvar alterações da tabela** para consolidar as edições na sessão. O app não salva registros permanentemente; exporte o Word antes de fechar.
-- A fonte da distância e a fonte documental do registro devem ser informadas. Não declare precisão certificada nem trajeto validado automaticamente para valores manuais.
-- O login Google e os Secrets permanecem inalterados.
+Cadastro manual sem coordenadas, preservação de distâncias conferidas, autenticação Google e exportação Word permanecem. Não há persistência entre sessões. Para instalar, substituir os arquivos do repositório GitHub pelos do ZIP e aguardar deploy do Streamlit. Segredos permanecem somente no Streamlit Cloud.

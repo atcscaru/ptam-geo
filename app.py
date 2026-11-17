@@ -7,7 +7,7 @@ from exporter import build_docx
 from infrastructure import FIELDS, build_infrastructure_considerando
 from geo import haversine
 
-st.set_page_config(page_title='PTAM GEO v2.5', page_icon='📍', layout='wide')
+st.set_page_config(page_title='PTAM GEO v2.6', page_icon='📍', layout='wide')
 
 # Autenticação obrigatória antes de qualquer consulta, dado do imóvel ou mapa.
 # Configure [auth] e ALLOWED_GOOGLE_EMAIL em Streamlit Cloud > Settings > Secrets.
@@ -41,7 +41,7 @@ with st.sidebar:
         st.logout()
 
 st.title('PTAM GEO | Considerandos para avaliação mercadológica')
-st.caption('Versão 2.5 • Acesso Google restrito • Pesquisa automática ou manual • Distâncias viárias • Word editável')
+st.caption('Versão 2.6 • Acesso Google restrito • Pesquisa automática ou manual • Percurso a pé por logradouros • Word editável')
 st.warning('Os cadastros são indicativos. Não declare pavimentação, redes públicas, funcionamento de serviços, natureza pública de instituições ou esquina mais próxima sem confirmação.')
 try:
     api_key = st.secrets.get('GOOGLE_MAPS_API_KEY', '')
@@ -60,7 +60,7 @@ with st.sidebar:
     st.header('Configurações')
     radius = st.number_input('Raio de pesquisa (metros)', min_value=100, max_value=5000, value=1000, step=100)
     categories = st.multiselect('Categorias', list(CATEGORIES), default=list(CATEGORIES))
-    routing = st.checkbox('Permitir cálculo de distância viária (Google Routes)', value=True)
+    routing = st.checkbox('Permitir cálculo de percurso a pé (Google Routes)', value=True)
     st.caption('Cada categoria consulta Google Places. Cada rota selecionada gera uma requisição adicional faturável.')
     st.metric('Places nesta sessão', f"{st.session_state.api_usage['places']}/{SESSION_PLACES_CAP}")
     st.metric('Routes nesta sessão', f"{st.session_state.api_usage['routes']}/{SESSION_ROUTES_CAP}")
@@ -103,7 +103,7 @@ if 'rows' in st.session_state:
     road = st.session_state.road
     st.subheader('Resultados e conferência')
     if manual_mode:
-        st.info('Modo manual: cadastre os pontos relevantes e suas distâncias viárias aproximadas. Nenhuma consulta ao Google Maps é feita neste modo.')
+        st.info('Modo manual: cadastre os pontos relevantes e suas distâncias aproximadas por percurso a pé em logradouros públicos. Nenhuma consulta ao Google Maps é feita neste modo.')
     else:
         st.write(f'Coordenadas: **{lat:.7f}, {lon:.7f}** | **{len(st.session_state.rows)}** registros')
         st.info(road['observação'])
@@ -119,28 +119,30 @@ if 'rows' in st.session_state:
         origin_lat = st.number_input('Latitude confirmada do imóvel', min_value=-90.0, max_value=90.0, value=float(lat), format='%.7f', key='origin_lat')
         origin_lon = st.number_input('Longitude confirmada do imóvel', min_value=-180.0, max_value=180.0, value=float(lon), format='%.7f', key='origin_lon')
     st.subheader('Seleção e conferência dos estabelecimentos')
+    st.warning('Critério PTAM GEO: menor percurso a pé exclusivamente por ruas, avenidas, travessas e outros logradouros públicos regulares indicados no mapa. Exclua becos, vielas, atalhos por terrenos e travessias não oficiais de cursos d’água. O Google Routes NÃO garante esse filtro. Confira cada trajeto e marque a coluna de validação somente após verificar; se necessário, corrija manualmente a distância e indique a fonte.')
     st.caption('É possível acrescentar estabelecimentos manualmente, inclusive os não cadastrados no Google. Informe a fonte e a natureza da medição.')
     if st.button('Adicionar estabelecimento manualmente'):
         st.session_state.rows.append({'incluir':True,'categoria':'Outros','nome':'','natureza_cemiterio':'Não verificada',
             'distância_reta_m':None,'distância_vias_m':None,'latitude':None,'longitude':None,
             'fonte':'','confiança':'Informação manual; sujeita a conferência', 'observação':'', 'texto_editado':'',
-            'origem_distancia':'Medição manual do avaliador','distancia_confirmada':True})
+            'origem_distancia':'Medição manual do avaliador','distancia_confirmada':True,'trajeto_validado':False})
         st.session_state.editor_revision=st.session_state.get('editor_revision',0)+1
         st.rerun()
-    cols=['incluir','categoria','nome','natureza_cemiterio','distância_vias_m','origem_distancia','distancia_confirmada','latitude','longitude','fonte','observação','texto_editado']
+    cols=['incluir','categoria','nome','natureza_cemiterio','distância_vias_m','origem_distancia','distancia_confirmada','trajeto_validado','latitude','longitude','fonte','observação','texto_editado']
     df=pd.DataFrame(st.session_state.rows)
     for c in cols:
         if c not in df.columns:
-            df[c]=False if c in ('incluir','distancia_confirmada') else None
+            df[c]=False if c in ('incluir','distancia_confirmada','trajeto_validado') else None
     edited=st.data_editor(df[cols],num_rows='dynamic',use_container_width=True,hide_index=True,
         column_config={
             'incluir':st.column_config.CheckboxColumn('Incluir'),
             'categoria':st.column_config.TextColumn('Categoria'),
             'nome':st.column_config.TextColumn('Estabelecimento / ponto relevante',required=True),
             'natureza_cemiterio':st.column_config.SelectboxColumn('Natureza do cemitério',options=['Não verificada','Público','Privado']),
-            'distância_vias_m':st.column_config.NumberColumn('Percurso viário aproximado (m)',min_value=0.0,step=1.0),
+            'distância_vias_m':st.column_config.NumberColumn('Percurso a pé conferido (m)',min_value=0.0,step=1.0),
             'origem_distancia':st.column_config.SelectboxColumn('Fonte da distância',options=['Google Routes','Google Earth','Medição manual do avaliador','Outra fonte verificada','Não verificada']),
             'distancia_confirmada':st.column_config.CheckboxColumn('Preservar distância conferida'),
+            'trajeto_validado':st.column_config.CheckboxColumn('Trajeto por logradouros conferido'),
             'latitude':st.column_config.NumberColumn('Latitude destino',format='%.7f'),
             'longitude':st.column_config.NumberColumn('Longitude destino',format='%.7f'),
             'fonte':st.column_config.TextColumn('Fonte / referência documental'),
@@ -160,6 +162,7 @@ if 'rows' in st.session_state:
             for r in updated:
                 if changed and not r.get('distancia_confirmada'):
                     r['distância_vias_m']=None
+                    r['trajeto_validado']=False
                 if pd.notna(r.get('latitude')) and pd.notna(r.get('longitude')):
                     a,b=float(r['latitude']),float(r['longitude'])
                     if not (-90<=a<=90 and -180<=b<=180):
@@ -171,7 +174,7 @@ if 'rows' in st.session_state:
             st.rerun()
         if (origin_lat,origin_lon)!=(lat,lon):
             st.warning('O ponto do imóvel foi alterado. Confirme a origem antes de calcular rotas ou exportar.')
-        if st.button('Calcular distâncias viárias dos selecionados',disabled=not routing or not bool(api_key)):
+        if st.button('Calcular percursos a pé dos selecionados',disabled=not routing or not bool(api_key)):
             updated=edited.to_dict('records')
             if (origin_lat,origin_lon)!=(lat,lon):
                 st.error('Confirme primeiro as coordenadas do imóvel.');st.stop()
@@ -187,22 +190,24 @@ if 'rows' in st.session_state:
             else:
                 st.session_state.api_usage['routes']+=len(eligible)
                 failures=0
-                with st.spinner('Calculando distâncias pelo Google Routes...'):
+                with st.spinner('Calculando percursos a pé pelo Google Routes...'):
                     for r in updated:
                         if any(r is candidate for candidate in eligible):
                             try:
                                 result=road_distance(lat,lon,float(r['latitude']),float(r['longitude']),api_key)
                                 r['distância_vias_m']=result
                                 r['origem_distancia']='Google Routes'
+                                r['trajeto_validado']=False  # rota sugerida, não validada
                             except Exception:
                                 failures+=1
                                 r['distância_vias_m']=None
+                                r['trajeto_validado']=False
                 st.session_state.rows=updated
                 st.session_state.editor_revision=st.session_state.get('editor_revision',0)+1
                 if failures:st.warning(f'{failures} percurso(s) indisponível(is).')
                 st.rerun()
     else:
-        st.caption('Para uma medição manual, preencha nome, categoria, distância viária aproximada, fonte e marque Incluir. Não é obrigatório fornecer coordenadas.')
+        st.caption('Para uma medição manual, preencha nome, categoria, distância aproximada por percurso a pé, fonte e marque Incluir. Não é obrigatório fornecer coordenadas.')
     st.subheader('Infraestrutura verificada: imóvel e logradouro')
     st.caption('Preenchimento manual. Não verificado não será declarado no considerando. Separe a existência da rede no logradouro da ligação efetiva no imóvel.')
     infra={'logradouro':{},'imovel':{}}
@@ -236,13 +241,15 @@ if 'rows' in st.session_state:
                 if pd.isna(r.get(k)):r[k]=''
         if any(r.get('incluir') and (not str(r.get('nome','')).strip() or r.get('distância_vias_m') is None or not str(r.get('fonte','')).strip()) for r in selected):
             st.error('Cada registro incluído deve ter nome, distância viária e fonte/referência.');st.stop()
+        if any(r.get('incluir') and not r.get('trajeto_validado',False) for r in selected):
+            st.error('Há registros selecionados sem conferência do percurso por logradouros públicos. Marque “Trajeto por logradouros conferido” somente após verificar o caminho no mapa e corrigir a distância, se necessário.');st.stop()
         if not any(r.get('incluir') for r in selected) and not notes.strip() and not infra_text:
             st.warning('Selecione registros ou informe considerandos confirmados.')
         else:
             content=build_docx(address or st.session_state.query_address,lat,lon,selected,road,notes,infra_text=infra_text,
-                method='Percurso viário estimado ou medição manual informada e conferida pelo avaliador; fonte individual indicada por registro')
+                method='Menor percurso a pé verificado pelo avaliador, exclusivamente por logradouros públicos regulares indicados no mapa; sem becos, vielas, atalhos por terrenos particulares ou travessias não oficiais de cursos d’água; fonte individual indicada por registro')
             st.download_button('Exportar considerandos em Word (.docx)',content,'PTAM_GEO_Considerandos.docx',
                 mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
 
 with st.expander('Integrações, privacidade e custos'):
-    st.markdown('''**Controle de custos:** até 20 consultas Places e 30 Routes por sessão. Esses limites não são globais, não persistem e não impedem cobranças de outras sessões. Use cotas e monitoramento no Google Cloud. **Google Places API (New):** requer chave de API, faturamento habilitado e cobra conforme requisições e campos solicitados. **Google Routes API:** requer chave e faturamento; cada percurso pode gerar cobrança. **Distância em linha reta:** calculada localmente, sem cobrança adicional. **Google Earth:** não integrado; não se afirma que a distância foi medida nele. **Pavimentação, esgoto, iluminação, esquina mais próxima e natureza pública dos serviços:** exigem vistoria ou cadastro oficial. **Exportação Word:** sem tarifa por documento nesta implementação. **Segurança:** a chave deve ficar nos Secrets do Streamlit, nunca no código ou no GitHub. O acesso é protegido por login Google autorizado; evite dados pessoais desnecessários. As coordenadas são transmitidas às APIs do Google. Consulte os termos e preços vigentes no Google Maps Platform.''')
+    st.markdown('''**Controle de custos:** até 20 consultas Places e 30 Routes por sessão. Esses limites não são globais, não persistem e não impedem cobranças de outras sessões. Use cotas e monitoramento no Google Cloud. **Google Places API (New):** requer chave de API, faturamento habilitado e cobra conforme requisições e campos solicitados. **Google Routes API (modo WALK):** requer chave e faturamento; cada percurso pode gerar cobrança. O modo WALK pode sugerir atalhos, becos e passagens que não atendem ao critério adotado; o avaliador deve conferir e corrigir antes da exportação. **Distância em linha reta:** calculada localmente, sem cobrança adicional. **Google Earth:** não integrado; não se afirma que a distância foi medida nele. **Pavimentação, esgoto, iluminação, esquina mais próxima e natureza pública dos serviços:** exigem vistoria ou cadastro oficial. **Exportação Word:** sem tarifa por documento nesta implementação. **Segurança:** a chave deve ficar nos Secrets do Streamlit, nunca no código ou no GitHub. O acesso é protegido por login Google autorizado; evite dados pessoais desnecessários. As coordenadas são transmitidas às APIs do Google. Consulte os termos e preços vigentes no Google Maps Platform.''')

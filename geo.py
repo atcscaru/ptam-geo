@@ -110,7 +110,7 @@ def query_google(lat, lon, key, radius=1000, categories=None):
 def road_distance(lat, lon, lat2, lon2, key, timeout=20):
     payload = {'origin': {'location': {'latLng': {'latitude': lat, 'longitude': lon}}},
                'destination': {'location': {'latLng': {'latitude': lat2, 'longitude': lon2}}},
-               'travelMode': 'DRIVE', 'routingPreference': 'TRAFFIC_UNAWARE', 'languageCode': 'pt-BR'}
+               'travelMode': 'WALK', 'languageCode': 'pt-BR'}
     data = _post('https://routes.googleapis.com/directions/v2:computeRoutes', payload, key,
                  'routes.distanceMeters', timeout=timeout)
     routes = data.get('routes', [])
