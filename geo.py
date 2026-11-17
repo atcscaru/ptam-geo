@@ -11,6 +11,7 @@ CATEGORIES = {
     'Órgãos públicos': ['city_hall', 'courthouse', 'police', 'post_office'],
     'Comércio e serviços': ['supermarket', 'shopping_mall', 'bank', 'atm', 'gas_station'],
     'Mobilidade': ['bus_station', 'transit_station'],
+    'Cemitérios': ['cemetery'],
 }
 
 def parse_coordinates(value):
@@ -103,7 +104,7 @@ def query_google(lat, lon, key, radius=1000, categories=None):
                 'fonte': p.get('googleMapsUri') or f'https://www.google.com/maps/place/?q=place_id:{pid}',
                 'confiança': 'Cadastro Google Places; não comprova funcionamento ou natureza pública',
                 'observação': f"{p.get('formattedAddress','')} | Tipo: {p.get('primaryType','não informado')}. Confirmar funcionamento, titularidade e acesso.",
-                'texto_editado': ''})
+                'texto_editado': '', 'natureza_cemiterio': 'Não verificada'})
     return sorted(output, key=lambda x: x['distância_reta_m'])
 
 def road_distance(lat, lon, lat2, lon2, key, timeout=20):

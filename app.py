@@ -7,9 +7,9 @@ from exporter import build_docx
 from infrastructure import FIELDS, build_infrastructure_considerando
 from geo import haversine
 
-st.set_page_config(page_title='PTAM GEO v2.2', page_icon='📍', layout='wide')
+st.set_page_config(page_title='PTAM GEO v2.3', page_icon='📍', layout='wide')
 st.title('PTAM GEO | Considerandos para avaliação mercadológica')
-st.caption('Versão 2.2 • Google Places e Routes • Revisão humana obrigatória • Word editável')
+st.caption('Versão 2.3 • Google Places e Routes • Revisão humana obrigatória • Word editável')
 st.warning('Os cadastros são indicativos. Não declare pavimentação, redes públicas, funcionamento de serviços, natureza pública de instituições ou esquina mais próxima sem confirmação.')
 try:
     api_key = st.secrets.get('GOOGLE_MAPS_API_KEY', '')
@@ -66,7 +66,7 @@ if 'rows' in st.session_state:
     for r in st.session_state.rows:
         folium.CircleMarker([r['latitude'],r['longitude']], radius=3, tooltip=r['nome']).add_to(m)
     st_folium(m, height=360, returned_objects=[])
-    cols=['incluir','categoria','nome','distância_reta_m','distância_vias_m','latitude','longitude','fonte','confiança','observação','texto_editado']
+    cols=['incluir','categoria','nome','natureza_cemiterio','distância_reta_m','distância_vias_m','latitude','longitude','fonte','confiança','observação','texto_editado']
     df=pd.DataFrame(st.session_state.rows)
     if df.empty:
         df=pd.DataFrame(columns=cols)
@@ -77,10 +77,11 @@ if 'rows' in st.session_state:
     origin_lon = st.number_input('Longitude confirmada do imóvel', min_value=-180.0, max_value=180.0, value=float(lon), format='%.7f', key='origin_lon')
     st.info('As coordenadas de cada estabelecimento estão disponíveis para edição na tabela. Ajuste-as para o ponto verificado, preferencialmente a entrada principal. O Google Places pode indicar apenas o centro do estabelecimento.')
     st.subheader('Seleção e conferência')
-    st.caption('Selecione os registros e revise os dados. A pesquisa limita a 20 resultados por categoria; não é levantamento exaustivo.')
+    st.caption('Selecione os registros e revise os dados. A pesquisa limita a 20 resultados por categoria; não é levantamento exaustivo. Cemitérios são pesquisados dentro do raio configurado; a natureza pública ou privada deve ser confirmada por fonte independente.')
     edited=st.data_editor(df[cols], num_rows='dynamic', use_container_width=True, hide_index=True,
         column_config={'latitude':st.column_config.NumberColumn('Latitude do destino',format='%.7f'), 'longitude':st.column_config.NumberColumn('Longitude do destino',format='%.7f'),'fonte':st.column_config.LinkColumn('Fonte'),
             'incluir':st.column_config.CheckboxColumn('Incluir'),
+            'natureza_cemiterio':st.column_config.SelectboxColumn('Natureza do cemitério (confirmada)',options=['Não verificada','Público','Privado']),
             'distância_reta_m':st.column_config.NumberColumn('Linha reta (m)'),
             'distância_vias_m':st.column_config.NumberColumn('Via (m)'),
             'texto_editado':st.column_config.TextColumn('Considerando revisado',width='large')}, key='editor_v2')

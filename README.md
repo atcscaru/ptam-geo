@@ -1,3 +1,7 @@
+## Novidade v2.3: cemitérios no raio de pesquisa
+
+A categoria **Cemitérios** consulta o tipo `cemetery` da Places API (New) dentro do raio configurado. Resultados podem estar ausentes ou incompletos; o limite por categoria é de 20. O avaliador seleciona cada cemitério e informa sua natureza pública ou privada somente após comprovação. Se não verificada, o Word explicita essa limitação. O custo preventivo passa a considerar seis categorias por pesquisa quando todas estiverem selecionadas.
+
 # PTAM GEO v2.2 | Infraestrutura e conferência de coordenadas
 
 Esta versão acrescenta formulário manual separado para **logradouro** e **imóvel avaliando** sobre pavimentação, abastecimento de água, saneamento/drenagem, esgotamento sanitário, energia elétrica e telefonia. Gera **um único considerando** no Word editável, com fonte obrigatória. Itens não verificados são omitidos.

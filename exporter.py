@@ -29,7 +29,12 @@ def build_docx(address,lat,lon,rows,road,notes,method='Linha reta geodésica e, 
             d=row.get('distância_reta_m');v=row.get('distância_vias_m')
             metrics=f'a aproximadamente {d} metros em linha reta' if d is not None else 'nas proximidades'
             if v is not None:metrics+=f' e {v} metros por percurso viário estimado'
-            s=f'Considerando que, na categoria {row.get("categoria", "serviços")}, consta o estabelecimento {row.get("nome", "não identificado")}, situado {metrics}, conforme cadastro geográfico consultado, sujeito a confirmação de funcionamento e localização;'
+            if row.get('categoria') == 'Cemitérios':
+                nature = row.get('natureza_cemiterio', 'Não verificada')
+                qualifier = ('público' if nature == 'Público' else 'privado' if nature == 'Privado' else 'de natureza administrativa não verificada')
+                s=f'Considerando que, no entorno do imóvel avaliando, foi identificado o cemitério {row.get("nome", "não identificado")}, {qualifier}, localizado {metrics}, conforme cadastro geográfico consultado, com localização, acesso e natureza sujeitos à conferência documental ou em vistoria;'
+            else:
+                s=f'Considerando que, na categoria {row.get("categoria", "serviços")}, consta o estabelecimento {row.get("nome", "não identificado")}, situado {metrics}, conforme cadastro geográfico consultado, sujeito a confirmação de funcionamento e localização;'
         para(s)
     if infra_text:
         para(infra_text)
