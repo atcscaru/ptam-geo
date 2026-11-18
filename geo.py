@@ -12,7 +12,26 @@ CATEGORIES = {
     'Comércio e serviços': ['supermarket', 'shopping_mall', 'bank', 'atm', 'gas_station'],
     'Mobilidade': ['bus_station', 'transit_station'],
     'Cemitérios': ['cemetery'],
+    'Academias': ['gym'],
+    'Shoppings e centros de compras': ['shopping_mall'],
 }
+
+# Termos complementares para unidades que podem não ter tipo específico no Google Places.
+# Cada termo gera uma consulta adicional e pode gerar cobrança.
+TEXT_QUERIES = {
+    'Saúde': [
+        'UBS unidade básica de saúde',
+        'USF PSF unidade de saúde da família',
+        'UPA unidade de pronto atendimento',
+        'maternidade',
+        'hospital veterinário clínica veterinária',
+        'USB unidade de saúde',
+    ],
+    'Shoppings e centros de compras': ['centro comercial galeria de lojas'],
+}
+
+def places_request_count(categories):
+    return sum(1 + len(TEXT_QUERIES.get(cat, [])) for cat in categories if cat in CATEGORIES)
 
 def parse_coordinates(value):
     value = unquote(value.strip())
@@ -81,30 +100,43 @@ def query_google(lat, lon, key, radius=1000, categories=None):
         raise ValueError('Raio deve estar entre 100 e 5.000 metros.')
     categories = categories or list(CATEGORIES)
     output, seen = [], set()
-    for cat in categories:
-        if cat not in CATEGORIES:
-            continue
-        payload = {'includedTypes': CATEGORIES[cat], 'maxResultCount': 20,
-                   'locationRestriction': {'circle': {'center': {'latitude': lat, 'longitude': lon}, 'radius': float(radius)}},
-                   'rankPreference': 'DISTANCE', 'languageCode': 'pt-BR'}
-        data = _post('https://places.googleapis.com/v1/places:searchNearby', payload, key,
-                     'places.id,places.displayName,places.location,places.formattedAddress,places.googleMapsUri,places.primaryType')
-        for p in data.get('places', []):
+
+    def append_places(places, cat, query_label=''):
+        for p in places:
             pid = p.get('id')
             loc = p.get('location', {})
             a, b = loc.get('latitude'), loc.get('longitude')
             if not pid or a is None or b is None or pid in seen:
                 continue
             d = haversine(lat, lon, a, b)
+            # O raio de pesquisa refere-se à distância geográfica, não ao percurso a pé.
             if d > radius:
                 continue
             seen.add(pid)
+            detail = f" | Busca complementar: {query_label}." if query_label else ''
             output.append({'incluir': False, 'categoria': cat, 'nome': p.get('displayName', {}).get('text', 'Sem nome'),
                 'distância_reta_m': d, 'distância_vias_m': None, 'latitude': a, 'longitude': b,
                 'fonte': p.get('googleMapsUri') or f'https://www.google.com/maps/place/?q=place_id:{pid}',
                 'confiança': 'Cadastro Google Places; não comprova funcionamento ou natureza pública',
-                'observação': f"{p.get('formattedAddress','')} | Tipo: {p.get('primaryType','não informado')}. Confirmar funcionamento, titularidade e acesso.",
+                'observação': f"{p.get('formattedAddress','')} | Tipo: {p.get('primaryType','não informado')}. Confirmar funcionamento, titularidade e acesso.{detail}",
                 'texto_editado': '', 'natureza_cemiterio': 'Não verificada'})
+
+    mask = 'places.id,places.displayName,places.location,places.formattedAddress,places.googleMapsUri,places.primaryType'
+    circle = {'center': {'latitude': lat, 'longitude': lon}, 'radius': float(radius)}
+    for cat in categories:
+        if cat not in CATEGORIES:
+            continue
+        payload = {'includedTypes': CATEGORIES[cat], 'maxResultCount': 20,
+                   'locationRestriction': {'circle': circle},
+                   'rankPreference': 'DISTANCE', 'languageCode': 'pt-BR'}
+        data = _post('https://places.googleapis.com/v1/places:searchNearby', payload, key, mask)
+        append_places(data.get('places', []), cat)
+
+        for term in TEXT_QUERIES.get(cat, []):
+            text_payload = {'textQuery': term, 'maxResultCount': 20,
+                            'locationBias': {'circle': circle}, 'languageCode': 'pt-BR'}
+            text_data = _post('https://places.googleapis.com/v1/places:searchText', text_payload, key, mask)
+            append_places(text_data.get('places', []), cat, term)
     return sorted(output, key=lambda x: x['distância_reta_m'])
 
 def road_distance(lat, lon, lat2, lon2, key, timeout=20):

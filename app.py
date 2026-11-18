@@ -2,12 +2,12 @@ import streamlit as st
 import pandas as pd
 import folium
 from streamlit_folium import st_folium
-from geo import resolve_input, query_google, road_distance, street_context, CATEGORIES
+from geo import resolve_input, query_google, road_distance, street_context, CATEGORIES, places_request_count
 from exporter import build_docx
 from infrastructure import FIELDS, build_infrastructure_considerando
 from geo import haversine
 
-st.set_page_config(page_title='PTAM GEO v2.6', page_icon='📍', layout='wide')
+st.set_page_config(page_title='PTAM GEO v2.7', page_icon='📍', layout='wide')
 
 # Autenticação obrigatória antes de qualquer consulta, dado do imóvel ou mapa.
 # Configure [auth] e ALLOWED_GOOGLE_EMAIL em Streamlit Cloud > Settings > Secrets.
@@ -41,7 +41,7 @@ with st.sidebar:
         st.logout()
 
 st.title('PTAM GEO | Considerandos para avaliação mercadológica')
-st.caption('Versão 2.6 • Acesso Google restrito • Pesquisa automática ou manual • Percurso a pé por logradouros • Word editável')
+st.caption('Versão 2.7 • Acesso Google restrito • Pesquisa automática ou manual • Percurso a pé por logradouros • Word editável')
 st.warning('Os cadastros são indicativos. Não declare pavimentação, redes públicas, funcionamento de serviços, natureza pública de instituições ou esquina mais próxima sem confirmação.')
 try:
     api_key = st.secrets.get('GOOGLE_MAPS_API_KEY', '')
@@ -61,7 +61,7 @@ with st.sidebar:
     radius = st.number_input('Raio de pesquisa (metros)', min_value=100, max_value=5000, value=1000, step=100)
     categories = st.multiselect('Categorias', list(CATEGORIES), default=list(CATEGORIES))
     routing = st.checkbox('Permitir cálculo de percurso a pé (Google Routes)', value=True)
-    st.caption('Cada categoria consulta Google Places. Cada rota selecionada gera uma requisição adicional faturável.')
+    st.caption('Cada categoria gera consulta Places; Saúde e centros de compras também fazem buscas complementares por nome. Cada rota gera outra requisição faturável.')
     st.metric('Places nesta sessão', f"{st.session_state.api_usage['places']}/{SESSION_PLACES_CAP}")
     st.metric('Routes nesta sessão', f"{st.session_state.api_usage['routes']}/{SESSION_ROUTES_CAP}")
     st.warning('Limites acima valem apenas para esta sessão. Reiniciar o aplicativo ou abrir outra sessão zera os contadores. Para limite efetivo, configure cotas no Google Cloud.')
@@ -78,7 +78,7 @@ address = st.text_input('Identificação do imóvel (opcional)', placeholder='Ru
 
 if not manual_mode and st.button('Pesquisar localização e estabelecimentos', type='primary', disabled=not bool(api_key)):
     try:
-        expected = len([c for c in categories if c in CATEGORIES])
+        expected = places_request_count(categories)
         if expected == 0:
             raise ValueError('Selecione ao menos uma categoria.')
         if st.session_state.api_usage['places'] + expected > SESSION_PLACES_CAP:
