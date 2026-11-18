@@ -7,7 +7,7 @@ from exporter import build_docx
 from infrastructure import FIELDS, build_infrastructure_considerando
 from geo import haversine
 
-st.set_page_config(page_title='PTAM GEO v2.7', page_icon='📍', layout='wide')
+st.set_page_config(page_title='PTAM GEO v2.8', page_icon='📍', layout='wide')
 
 # Autenticação obrigatória antes de qualquer consulta, dado do imóvel ou mapa.
 # Configure [auth] e ALLOWED_GOOGLE_EMAIL em Streamlit Cloud > Settings > Secrets.
@@ -41,7 +41,7 @@ with st.sidebar:
         st.logout()
 
 st.title('PTAM GEO | Considerandos para avaliação mercadológica')
-st.caption('Versão 2.7 • Acesso Google restrito • Pesquisa automática ou manual • Percurso a pé por logradouros • Word editável')
+st.caption('Versão 2.8 • Acesso Google restrito • Pesquisa automática ou manual • Percurso a pé por logradouros • Word editável')
 st.warning('Os cadastros são indicativos. Não declare pavimentação, redes públicas, funcionamento de serviços, natureza pública de instituições ou esquina mais próxima sem confirmação.')
 try:
     api_key = st.secrets.get('GOOGLE_MAPS_API_KEY', '')
@@ -114,18 +114,22 @@ if 'rows' in st.session_state:
             if pd.notna(r.get('latitude')) and pd.notna(r.get('longitude')):
                 folium.CircleMarker([r['latitude'],r['longitude']], radius=3, tooltip=r['nome']).add_to(m)
         st_folium(m, height=360, returned_objects=[])
-        st.subheader('Conferência do ponto do imóvel')
-        st.caption('Confirme o ponto exato do imóvel. O centro do mapa nem sempre é o ponto do imóvel.')
-        origin_lat = st.number_input('Latitude confirmada do imóvel', min_value=-90.0, max_value=90.0, value=float(lat), format='%.7f', key='origin_lat')
-        origin_lon = st.number_input('Longitude confirmada do imóvel', min_value=-180.0, max_value=180.0, value=float(lon), format='%.7f', key='origin_lon')
+        with st.expander('Ajustar localização (somente em casos excepcionais)', expanded=False):
+            st.caption('Use apenas quando o Google posicionar incorretamente o imóvel ou a entrada do estabelecimento. Alterar coordenadas exige novo cálculo da rota correspondente.')
+            origin_lat = st.number_input('Latitude do acesso ao imóvel', min_value=-90.0, max_value=90.0, value=float(lat), format='%.7f', key='origin_lat')
+            origin_lon = st.number_input('Longitude do acesso ao imóvel', min_value=-180.0, max_value=180.0, value=float(lon), format='%.7f', key='origin_lon')
+            st.caption('As coordenadas dos estabelecimentos podem ser corrigidas na tabela quando necessário.')
     st.subheader('Seleção e conferência dos estabelecimentos')
+    if st.session_state.pop('table_saved_notice',False):
+        st.success('Alterações salvas nesta sessão. Distâncias corrigidas foram protegidas contra novos cálculos.')
+    st.info('Fluxo: selecione os locais, calcule os percursos a pé em lote, confira os resultados, corrija apenas as distâncias necessárias e clique em Salvar e proteger correções.')
     st.warning('Critério PTAM GEO: menor percurso a pé exclusivamente por ruas, avenidas, travessas e outros logradouros públicos regulares indicados no mapa. Exclua becos, vielas, atalhos por terrenos e travessias não oficiais de cursos d’água. O Google Routes NÃO garante esse filtro. Confira cada trajeto e marque a coluna de validação somente após verificar; se necessário, corrija manualmente a distância e indique a fonte.')
     st.caption('É possível acrescentar estabelecimentos manualmente, inclusive os não cadastrados no Google. Informe a fonte e a natureza da medição.')
     if st.button('Adicionar estabelecimento manualmente'):
         st.session_state.rows.append({'incluir':True,'categoria':'Outros','nome':'','natureza_cemiterio':'Não verificada',
             'distância_reta_m':None,'distância_vias_m':None,'latitude':None,'longitude':None,
             'fonte':'','confiança':'Informação manual; sujeita a conferência', 'observação':'', 'texto_editado':'',
-            'origem_distancia':'Medição manual do avaliador','distancia_confirmada':True,'trajeto_validado':False})
+            'origem_distancia':'Medição manual do avaliador','distancia_confirmada':False,'trajeto_validado':False})
         st.session_state.editor_revision=st.session_state.get('editor_revision',0)+1
         st.rerun()
     cols=['incluir','categoria','nome','natureza_cemiterio','distância_vias_m','origem_distancia','distancia_confirmada','trajeto_validado','latitude','longitude','fonte','observação','texto_editado']
@@ -133,7 +137,8 @@ if 'rows' in st.session_state:
     for c in cols:
         if c not in df.columns:
             df[c]=False if c in ('incluir','distancia_confirmada','trajeto_validado') else None
-    edited=st.data_editor(df[cols],num_rows='dynamic',use_container_width=True,hide_index=True,
+    with st.expander('Tabela de estabelecimentos e distâncias', expanded=True):
+        edited=st.data_editor(df[cols],num_rows='fixed',use_container_width=True,hide_index=True,
         column_config={
             'incluir':st.column_config.CheckboxColumn('Incluir'),
             'categoria':st.column_config.TextColumn('Categoria'),
@@ -149,65 +154,83 @@ if 'rows' in st.session_state:
             'observação':st.column_config.TextColumn('Observação / acesso'),
             'texto_editado':st.column_config.TextColumn('Considerando personalizado (opcional)',width='large'),
         },key=f"editor_{st.session_state.get('editor_revision',0)}")
-    # Edits from data_editor are committed explicitly; calculations read the latest widget value.
-    if st.button('Salvar alterações da tabela'):
-        st.session_state.rows=edited.to_dict('records')
-        st.session_state.editor_revision=st.session_state.get('editor_revision',0)+1
-        st.success('Alterações salvas nesta sessão. Não são armazenadas permanentemente.')
-        st.rerun()
+    # Marcar como manual somente distâncias efetivamente alteradas pelo avaliador.
+    def protect_manual_changes(records, baseline):
+        for i, row in enumerate(records):
+            old = baseline[i] if i < len(baseline) else {}
+            new_distance = row.get('distância_vias_m')
+            old_distance = old.get('distância_vias_m')
+            new_num = None if pd.isna(new_distance) else float(new_distance)
+            old_num = None if pd.isna(old_distance) else float(old_distance)
+            if new_num != old_num and new_num is not None:
+                if row.get('origem_distancia') in (None, '', 'Google Routes', 'Não verificada'):
+                    row['origem_distancia'] = 'Medição manual do avaliador'
+                row['distancia_confirmada'] = True
+            # Corrigir coordenadas invalida rota automática anterior, mas não a distância manual protegida.
+            if old and any((None if pd.isna(row.get(k)) else row.get(k)) != (None if pd.isna(old.get(k)) else old.get(k)) for k in ('latitude','longitude')):
+                if not row.get('distancia_confirmada'):
+                    row['distância_vias_m'] = None
+                    row['trajeto_validado'] = False
+        return records
+
     if not manual_mode:
-        if st.button('Conferir coordenadas e atualizar origem'):
-            updated=edited.to_dict('records')
-            changed=(origin_lat,origin_lon)!=(lat,lon)
-            for r in updated:
-                if changed and not r.get('distancia_confirmada'):
-                    r['distância_vias_m']=None
-                    r['trajeto_validado']=False
-                if pd.notna(r.get('latitude')) and pd.notna(r.get('longitude')):
-                    a,b=float(r['latitude']),float(r['longitude'])
-                    if not (-90<=a<=90 and -180<=b<=180):
-                        st.error('Coordenadas de destino inválidas.');st.stop()
-                    r['distância_reta_m']=haversine(origin_lat,origin_lon,a,b)
-            st.session_state.rows=updated
-            st.session_state.lat,st.session_state.lon=origin_lat,origin_lon
-            st.session_state.editor_revision=st.session_state.get('editor_revision',0)+1
-            st.rerun()
+        st.subheader('Cálculo automático em lote')
         if (origin_lat,origin_lon)!=(lat,lon):
-            st.warning('O ponto do imóvel foi alterado. Confirme a origem antes de calcular rotas ou exportar.')
-        if st.button('Calcular percursos a pé dos selecionados',disabled=not routing or not bool(api_key)):
-            updated=edited.to_dict('records')
+            st.warning('O acesso do imóvel foi ajustado. Clique em Atualizar origem (excepcional) antes de calcular percursos.')
+        with st.expander('Atualizar origem ou coordenadas corrigidas (excepcional)', expanded=False):
+            if st.button('Atualizar origem e coordenadas corrigidas'):
+                updated=protect_manual_changes(edited.to_dict('records'),st.session_state.rows)
+                changed=(origin_lat,origin_lon)!=(lat,lon)
+                for r in updated:
+                    if changed and not r.get('distancia_confirmada'):
+                        r['distância_vias_m']=None
+                        r['trajeto_validado']=False
+                    if pd.notna(r.get('latitude')) and pd.notna(r.get('longitude')):
+                        a,b=float(r['latitude']),float(r['longitude'])
+                        if not (-90<=a<=90 and -180<=b<=180):
+                            st.error('Coordenadas de destino inválidas.');st.stop()
+                        r['distância_reta_m']=haversine(origin_lat,origin_lon,a,b)
+                st.session_state.rows=updated
+                st.session_state.lat,st.session_state.lon=origin_lat,origin_lon
+                st.session_state.editor_revision=st.session_state.get('editor_revision',0)+1
+                st.rerun()
+        if st.button('Calcular percursos a pé dos selecionados',type='primary',disabled=not routing or not bool(api_key)):
+            updated=protect_manual_changes(edited.to_dict('records'),st.session_state.rows)
             if (origin_lat,origin_lon)!=(lat,lon):
-                st.error('Confirme primeiro as coordenadas do imóvel.');st.stop()
+                st.error('Atualize primeiro a origem corrigida na seção excepcional.');st.stop()
             selected=[r for r in updated if r.get('incluir') and not r.get('distancia_confirmada')]
-            invalid=[r for r in selected if pd.isna(r.get('latitude')) or pd.isna(r.get('longitude'))]
-            eligible=[r for r in selected if r not in invalid]
+            eligible=[r for r in selected if pd.notna(r.get('latitude')) and pd.notna(r.get('longitude'))]
             if len(eligible)>10:
-                st.warning('Selecione até 10 rotas não confirmadas por lote.')
+                st.warning('Selecione até 10 percursos não protegidos por lote.')
             elif st.session_state.api_usage['routes']+len(eligible)>SESSION_ROUTES_CAP:
                 st.warning('Limite preventivo de rotas nesta sessão atingido.')
             elif not eligible:
-                st.warning('Nenhum registro selecionado com coordenadas válidas e distância não confirmada.')
+                st.warning('Nenhum estabelecimento selecionado com coordenadas válidas e distância não protegida.')
             else:
                 st.session_state.api_usage['routes']+=len(eligible)
                 failures=0
                 with st.spinner('Calculando percursos a pé pelo Google Routes...'):
-                    for r in updated:
-                        if any(r is candidate for candidate in eligible):
-                            try:
-                                result=road_distance(lat,lon,float(r['latitude']),float(r['longitude']),api_key)
-                                r['distância_vias_m']=result
-                                r['origem_distancia']='Google Routes'
-                                r['trajeto_validado']=False  # rota sugerida, não validada
-                            except Exception:
-                                failures+=1
-                                r['distância_vias_m']=None
-                                r['trajeto_validado']=False
+                    for r in eligible:
+                        try:
+                            r['distância_vias_m']=road_distance(lat,lon,float(r['latitude']),float(r['longitude']),api_key)
+                            r['origem_distancia']='Google Routes'
+                            r['trajeto_validado']=False
+                        except Exception:
+                            failures+=1
+                            r['distância_vias_m']=None
+                            r['trajeto_validado']=False
                 st.session_state.rows=updated
                 st.session_state.editor_revision=st.session_state.get('editor_revision',0)+1
                 if failures:st.warning(f'{failures} percurso(s) indisponível(is).')
                 st.rerun()
     else:
-        st.caption('Para uma medição manual, preencha nome, categoria, distância aproximada por percurso a pé, fonte e marque Incluir. Não é obrigatório fornecer coordenadas.')
+        st.caption('No cadastro manual, preencha nome, categoria, distância, fonte e confirme o trajeto. Não são exigidas coordenadas.')
+    if st.button('Salvar e proteger correções da tabela'):
+        updated=protect_manual_changes(edited.to_dict('records'),st.session_state.rows)
+        st.session_state.table_saved_notice=True
+        st.session_state.rows=updated
+        st.session_state.editor_revision=st.session_state.get('editor_revision',0)+1
+        st.rerun()
     st.subheader('Infraestrutura verificada: imóvel e logradouro')
     st.caption('Preenchimento manual. Não verificado não será declarado no considerando. Separe a existência da rede no logradouro da ligação efetiva no imóvel.')
     infra={'logradouro':{},'imovel':{}}
@@ -233,7 +256,7 @@ if 'rows' in st.session_state:
             st.error('Confirme as coordenadas da origem antes de exportar.');st.stop()
         if any(v!='Não verificado' for section in infra.values() for v in section.values()) and not infra_source.strip():
             st.error('Informe a fonte das condições de infraestrutura antes de exportar.');st.stop()
-        selected=edited.to_dict('records')
+        selected=protect_manual_changes(edited.to_dict('records'),st.session_state.rows)
         for r in selected:
             for k in ('distância_vias_m','distância_reta_m'):
                 if pd.isna(r.get(k)):r[k]=None
@@ -243,6 +266,8 @@ if 'rows' in st.session_state:
             st.error('Cada registro incluído deve ter nome, distância viária e fonte/referência.');st.stop()
         if any(r.get('incluir') and not r.get('trajeto_validado',False) for r in selected):
             st.error('Há registros selecionados sem conferência do percurso por logradouros públicos. Marque “Trajeto por logradouros conferido” somente após verificar o caminho no mapa e corrigir a distância, se necessário.');st.stop()
+        if any(r.get('incluir') and str(r.get('texto_editado') or '').strip() for r in selected):
+            st.info('Há considerandos personalizados. Confira se as distâncias escritas nesses textos correspondem às distâncias finais da tabela.')
         if not any(r.get('incluir') for r in selected) and not notes.strip() and not infra_text:
             st.warning('Selecione registros ou informe considerandos confirmados.')
         else:

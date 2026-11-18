@@ -1,4 +1,4 @@
-## PTAM GEO v2.7: percurso a pé por logradouros públicos
+## PTAM GEO v2.8: percurso a pé por logradouros públicos
 
 O Google Routes agora consulta o modo `WALK`, não automóvel. O critério adotado é o menor percurso a pé por ruas, avenidas, travessas e demais logradouros públicos regulares identificados no mapa. Não utilizar becos, vielas, atalhos por terrenos ou travessias não oficiais de cursos d’água. Pontes e travessias oficiais de pedestres integradas aos logradouros são admitidas.
 
@@ -7,10 +7,20 @@ O Google Routes agora consulta o modo `WALK`, não automóvel. O critério adota
 Cadastro manual sem coordenadas, preservação de distâncias conferidas, autenticação Google e exportação Word permanecem. Não há persistência entre sessões. Para instalar, substituir os arquivos do repositório GitHub pelos do ZIP e aguardar deploy do Streamlit. Segredos permanecem somente no Streamlit Cloud.
 
 
-## Categorias ampliadas na v2.7
+## Categorias ampliadas na v2.8
 - Academias (gym).
 - Shoppings e centros de compras (shopping_mall e busca textual por centros comerciais/galerias).
 - Saúde: hospitais, clínicas, médicos e farmácias, com buscas textuais complementares para UBS, USF/PSF, UPA, maternidades, clínicas/hospitais veterinários e USB.
 - A pesquisa utiliza o raio geográfico informado. A distância por percurso a pé é calculada posteriormente para os pontos selecionados.
 - As buscas textuais são indicativas, podem retornar resultados imprecisos ou incompletos e exigem confirmação humana de categoria, natureza e funcionamento.
 - As buscas complementares aumentam o consumo da Places API. O contador preventivo contabiliza todas as requisições previstas antes de pesquisar.
+
+
+## Fluxo simplificado v2.8
+1. Pesquise os estabelecimentos e marque **Incluir** nos relevantes.
+2. Clique **Calcular percursos a pé dos selecionados**. São processados até dez locais por lote, sujeitos à cota da sessão.
+3. Confira os trajetos em logradouros públicos e marque a validação apenas após verificar.
+4. Corrija somente distâncias incorretas, escolhendo a origem da medição (Google Earth, medição manual ou outra).
+5. Clique **Salvar e proteger correções da tabela** e exporte o Word após a validação.
+
+Distâncias editadas são automaticamente protegidas de cálculos posteriores. O botão de ajuste de origem e coordenadas fica na seção excepcional. Se a localização do imóvel ou do estabelecimento estiver incorreta, ajuste-a e recalcule o percurso afetado. Dados permanecem apenas na sessão Streamlit, sem armazenamento permanente. O Google Routes não garante automaticamente exclusão de vielas e atalhos.
