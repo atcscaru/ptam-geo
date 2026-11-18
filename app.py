@@ -7,7 +7,7 @@ from exporter import build_docx
 from infrastructure import FIELDS, build_infrastructure_considerando
 from geo import haversine
 
-st.set_page_config(page_title='PTAM GEO v2.8', page_icon='📍', layout='wide')
+st.set_page_config(page_title='PTAM GEO v2.8.1', page_icon='📍', layout='wide')
 
 # Autenticação obrigatória antes de qualquer consulta, dado do imóvel ou mapa.
 # Configure [auth] e ALLOWED_GOOGLE_EMAIL em Streamlit Cloud > Settings > Secrets.
@@ -41,7 +41,7 @@ with st.sidebar:
         st.logout()
 
 st.title('PTAM GEO | Considerandos para avaliação mercadológica')
-st.caption('Versão 2.8 • Acesso Google restrito • Pesquisa automática ou manual • Percurso a pé por logradouros • Word editável')
+st.caption('Versão 2.8.1 • Acesso Google restrito • Pesquisa automática ou manual • Percurso a pé por logradouros • Word editável')
 st.warning('Os cadastros são indicativos. Não declare pavimentação, redes públicas, funcionamento de serviços, natureza pública de instituições ou esquina mais próxima sem confirmação.')
 try:
     api_key = st.secrets.get('GOOGLE_MAPS_API_KEY', '')
@@ -70,7 +70,7 @@ mode = st.radio('Modo de levantamento', ['Pesquisa automática pelo Google Maps'
 manual_mode = mode.startswith('Cadastro manual')
 if st.session_state.get('last_mode') != mode:
     st.session_state.last_mode = mode
-    for k in ('rows','road','lat','lon','query_radius','query_address','manual_initialized'):
+    for k in ('rows','road','lat','lon','query_radius','query_address','manual_initialized','routes_last_report'):
         st.session_state.pop(k,None)
     st.session_state.editor_revision=st.session_state.get('editor_revision',0)+1
 link = st.text_input('Link Google Maps ou coordenadas (latitude, longitude)', placeholder='https://www.google.com/maps/... ou -8.28, -35.97')
@@ -88,6 +88,7 @@ if not manual_mode and st.button('Pesquisar localização e estabelecimentos', t
         lat, lon = resolve_input(link)
         with st.spinner('Consultando Google Places...'):
             rows = query_google(lat, lon, api_key, radius, categories)
+        st.session_state.pop('routes_last_report',None)
         st.session_state.update(rows=rows, road=street_context(lat, lon), lat=lat, lon=lon, query_radius=radius, query_address=address, editor_revision=st.session_state.get('editor_revision',0)+1)
         st.success(f'Pesquisa concluída: {len(rows)} registros. Confira as informações antes de utilizar no PTAM.')
     except Exception as exc:
@@ -120,9 +121,21 @@ if 'rows' in st.session_state:
             origin_lon = st.number_input('Longitude do acesso ao imóvel', min_value=-180.0, max_value=180.0, value=float(lon), format='%.7f', key='origin_lon')
             st.caption('As coordenadas dos estabelecimentos podem ser corrigidas na tabela quando necessário.')
     st.subheader('Seleção e conferência dos estabelecimentos')
+    if st.session_state.get('routes_last_report'):
+        report = st.session_state.routes_last_report
+        st.info(f"Último cálculo: {report['ok']} percurso(s) calculado(s), {len(report['errors'])} indisponível(is). Veja as distâncias na tabela abaixo.")
+        if report['errors']:
+            with st.expander('Ver detalhes dos percursos não calculados', expanded=True):
+                for error in report['errors']:
+                    st.error(error)
+    calculated = [r for r in st.session_state.rows if r.get('incluir') and pd.notna(r.get('distância_vias_m'))]
+    if calculated:
+        st.markdown('**Distâncias disponíveis para conferência**')
+        st.dataframe(pd.DataFrame([{'Estabelecimento': r.get('nome',''), 'Percurso a pé (m)': r.get('distância_vias_m'), 'Origem': r.get('origem_distancia','')} for r in calculated]), hide_index=True, use_container_width=True)
+
     if st.session_state.pop('table_saved_notice',False):
         st.success('Alterações salvas nesta sessão. Distâncias corrigidas foram protegidas contra novos cálculos.')
-    st.info('Fluxo: selecione os locais, calcule os percursos a pé em lote, confira os resultados, corrija apenas as distâncias necessárias e clique em Salvar e proteger correções.')
+    st.info('Fluxo: marque os locais na tabela, clique em Calcular percursos a pé dos selecionados, confira as distâncias exibidas, corrija apenas o necessário e clique em Salvar e proteger correções.')
     st.warning('Critério PTAM GEO: menor percurso a pé exclusivamente por ruas, avenidas, travessas e outros logradouros públicos regulares indicados no mapa. Exclua becos, vielas, atalhos por terrenos e travessias não oficiais de cursos d’água. O Google Routes NÃO garante esse filtro. Confira cada trajeto e marque a coluna de validação somente após verificar; se necessário, corrija manualmente a distância e indique a fonte.')
     st.caption('É possível acrescentar estabelecimentos manualmente, inclusive os não cadastrados no Google. Informe a fonte e a natureza da medição.')
     if st.button('Adicionar estabelecimento manualmente'):
@@ -208,20 +221,25 @@ if 'rows' in st.session_state:
                 st.warning('Nenhum estabelecimento selecionado com coordenadas válidas e distância não protegida.')
             else:
                 st.session_state.api_usage['routes']+=len(eligible)
-                failures=0
+                errors=[]
+                ok=0
                 with st.spinner('Calculando percursos a pé pelo Google Routes...'):
                     for r in eligible:
                         try:
-                            r['distância_vias_m']=road_distance(lat,lon,float(r['latitude']),float(r['longitude']),api_key)
+                            distance = road_distance(lat,lon,float(r['latitude']),float(r['longitude']),api_key)
+                            if distance is None:
+                                raise ValueError('Google Routes não retornou um percurso.')
+                            r['distância_vias_m']=distance
+                            ok += 1
                             r['origem_distancia']='Google Routes'
                             r['trajeto_validado']=False
-                        except Exception:
-                            failures+=1
+                        except Exception as exc:
+                            errors.append(f"{r.get('nome','Estabelecimento')}: {str(exc)[:250]}")
                             r['distância_vias_m']=None
                             r['trajeto_validado']=False
                 st.session_state.rows=updated
+                st.session_state.routes_last_report={'ok':ok,'errors':errors}
                 st.session_state.editor_revision=st.session_state.get('editor_revision',0)+1
-                if failures:st.warning(f'{failures} percurso(s) indisponível(is).')
                 st.rerun()
     else:
         st.caption('No cadastro manual, preencha nome, categoria, distância, fonte e confirme o trajeto. Não são exigidas coordenadas.')
