@@ -49,7 +49,7 @@ if modulo == 'Pesquisa de amostras mercadológicas':
     st.stop()
 
 st.title('PTAM GEO | Considerandos para avaliação mercadológica')
-st.caption('Versão 2.8.2 • Acesso Google restrito • Pesquisa automática ou manual • Percurso a pé por logradouros • Word editável')
+st.caption('Versão 3.0 • Acesso Google restrito • Pesquisa automática ou manual • Percurso a pé por logradouros • Word editável')
 st.warning('Os cadastros são indicativos. Não declare pavimentação, redes públicas, funcionamento de serviços, natureza pública de instituições ou esquina mais próxima sem confirmação.')
 try:
     api_key = st.secrets.get('GOOGLE_MAPS_API_KEY', '')
