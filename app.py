@@ -7,7 +7,7 @@ from exporter import build_docx
 from infrastructure import FIELDS, build_infrastructure_considerando
 from geo import haversine
 
-st.set_page_config(page_title='PTAM GEO v2.8.2', page_icon='📍', layout='wide')
+st.set_page_config(page_title='PTAM GEO v2.9', page_icon='📍', layout='wide')
 
 # Autenticação obrigatória antes de qualquer consulta, dado do imóvel ou mapa.
 # Configure [auth] e ALLOWED_GOOGLE_EMAIL em Streamlit Cloud > Settings > Secrets.
@@ -39,6 +39,14 @@ with st.sidebar:
     st.caption('Acesso autorizado')
     if st.button('Sair', key='logout'):
         st.logout()
+
+# O módulo de amostras é isolado: não altera o estado da avaliação de entorno.
+with st.sidebar:
+    modulo = st.radio('Módulo de trabalho', ['Considerandos e entorno', 'Pesquisa de amostras mercadológicas'], key='ptam_modulo')
+if modulo == 'Pesquisa de amostras mercadológicas':
+    from amostras import render as render_amostras
+    render_amostras()
+    st.stop()
 
 st.title('PTAM GEO | Considerandos para avaliação mercadológica')
 st.caption('Versão 2.8.2 • Acesso Google restrito • Pesquisa automática ou manual • Percurso a pé por logradouros • Word editável')

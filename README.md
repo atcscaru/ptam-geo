@@ -28,3 +28,19 @@ Distâncias editadas são automaticamente protegidas de cálculos posteriores. O
 
 ## Versão 2.8.2: botão Nova avaliação
 Na barra lateral, selecione **Nova avaliação** e confirme. O aplicativo descarta os resultados, revisões, formulário de infraestrutura, texto complementar e confirmação de exportação da avaliação anterior. Os campos de endereço e localização são reiniciados. O login Google e os contadores de consumo de APIs da sessão são preservados. **Exporte o Word antes de confirmar:** não existe recuperação automática da avaliação descartada. Não use Limpar caches para iniciar outro imóvel. A dependência `httpx` foi explicitamente mantida em `requirements.txt` para o login Google.
+
+## Versão 2.9: módulo independente de pesquisa de amostras
+
+Na barra lateral, selecione **Pesquisa de amostras mercadológicas**. O módulo atual **Considerandos e entorno** permanece inalterado, exceto pela inclusão do seletor de módulos.
+
+1. Informe coordenadas ou link Google Maps do imóvel avaliando, cidade/bairro e tipo de imóvel. O raio inicial é **1.000 metros**.
+2. Abra as pesquisas assistidas em buscadores. **Não há busca automática de anúncios dentro do raio**, nem integração direta aos portais. A localização dos resultados de buscadores precisa ser conferida.
+3. Cadastre os anúncios manualmente ou importe um CSV. Informe preço, área, endereço, coordenadas (se disponíveis), fonte, link, data e situação do anúncio.
+4. Confira o cálculo automático de R$/m² e o filtro geográfico em linha reta quando **origem e destino possuem coordenadas**. A ausência de coordenadas é identificada como **Não verificado**. O raio de 1 km é apenas um filtro de triagem, não uma prova de comparabilidade.
+5. Selecione e exporte os registros para CSV ou Word. A média exibida é **apenas descritiva**: não é resultado de avaliação e não aplica tratamento de dados, homogeneização ou fator de oferta.
+
+**Fontes e limitações:** o aplicativo não coleta anúncios de terceiros por raspagem, não comprova preços de venda efetivamente negociados e não verifica vigência, localização ou titularidade dos anúncios. Não classifique anúncios como transações realizadas sem documentação. Registre fontes e datas e confira comparabilidade e autorização de uso das informações.
+
+**Privacidade:** os dados ficam apenas na sessão do Streamlit; exporte antes de encerrar. Não inclua CPF, telefone ou outros dados pessoais desnecessários. As buscas externas são abertas pelo navegador do usuário.
+
+**Custos:** o módulo de amostras não faz novas chamadas às APIs Google Places/Routes. Os links de pesquisa externa podem ter condições próprias de uso. O módulo de entorno mantém suas cotas e dependências.
