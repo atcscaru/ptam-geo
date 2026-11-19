@@ -24,3 +24,7 @@ Cadastro manual sem coordenadas, preservação de distâncias conferidas, autent
 5. Clique **Salvar e proteger correções da tabela** e exporte o Word após a validação.
 
 Distâncias editadas são automaticamente protegidas de cálculos posteriores. O botão de ajuste de origem e coordenadas fica na seção excepcional. Se a localização do imóvel ou do estabelecimento estiver incorreta, ajuste-a e recalcule o percurso afetado. Dados permanecem apenas na sessão Streamlit, sem armazenamento permanente. O Google Routes não garante automaticamente exclusão de vielas e atalhos.
+
+
+## Versão 2.8.2: botão Nova avaliação
+Na barra lateral, selecione **Nova avaliação** e confirme. O aplicativo descarta os resultados, revisões, formulário de infraestrutura, texto complementar e confirmação de exportação da avaliação anterior. Os campos de endereço e localização são reiniciados. O login Google e os contadores de consumo de APIs da sessão são preservados. **Exporte o Word antes de confirmar:** não existe recuperação automática da avaliação descartada. Não use Limpar caches para iniciar outro imóvel. A dependência `httpx` foi explicitamente mantida em `requirements.txt` para o login Google.

@@ -7,7 +7,7 @@ from exporter import build_docx
 from infrastructure import FIELDS, build_infrastructure_considerando
 from geo import haversine
 
-st.set_page_config(page_title='PTAM GEO v2.8.1', page_icon='📍', layout='wide')
+st.set_page_config(page_title='PTAM GEO v2.8.2', page_icon='📍', layout='wide')
 
 # Autenticação obrigatória antes de qualquer consulta, dado do imóvel ou mapa.
 # Configure [auth] e ALLOWED_GOOGLE_EMAIL em Streamlit Cloud > Settings > Secrets.
@@ -41,7 +41,7 @@ with st.sidebar:
         st.logout()
 
 st.title('PTAM GEO | Considerandos para avaliação mercadológica')
-st.caption('Versão 2.8.1 • Acesso Google restrito • Pesquisa automática ou manual • Percurso a pé por logradouros • Word editável')
+st.caption('Versão 2.8.2 • Acesso Google restrito • Pesquisa automática ou manual • Percurso a pé por logradouros • Word editável')
 st.warning('Os cadastros são indicativos. Não declare pavimentação, redes públicas, funcionamento de serviços, natureza pública de instituições ou esquina mais próxima sem confirmação.')
 try:
     api_key = st.secrets.get('GOOGLE_MAPS_API_KEY', '')
@@ -56,6 +56,40 @@ if 'api_usage' not in st.session_state:
 SESSION_PLACES_CAP = 20
 SESSION_ROUTES_CAP = 30
 
+# Uma nova avaliação limpa somente os dados do imóvel e os campos de revisão.
+# Não reinicia a autenticação nem os contadores de consumo de APIs.
+if 'evaluation_seq' not in st.session_state:
+    st.session_state.evaluation_seq = 0
+
+with st.sidebar:
+    st.divider()
+    st.subheader('Avaliações')
+    if not st.session_state.get('confirm_new_evaluation', False):
+        if st.button('Nova avaliação', key='new_evaluation_request', use_container_width=True):
+            st.session_state.confirm_new_evaluation = True
+            st.rerun()
+    else:
+        st.warning('A pesquisa atual e as correções não exportadas serão descartadas. Exporte o Word antes de continuar.')
+        a, b = st.columns(2)
+        with a:
+            if st.button('Confirmar', key='new_evaluation_confirm', type='primary'):
+                fixed_keys = (
+                    'rows', 'road', 'lat', 'lon', 'query_radius', 'query_address',
+                    'manual_initialized', 'routes_last_report', 'last_mode',
+                    'origin_lat', 'origin_lon', 'table_saved_notice',
+                    'infra_source', 'confirm_new_evaluation',
+                )
+                for key in list(st.session_state.keys()):
+                    if (key in fixed_keys or key.startswith('infra_rua_')
+                            or key.startswith('infra_imovel_') or key.startswith('editor_')):
+                        del st.session_state[key]
+                st.session_state.evaluation_seq += 1
+                st.rerun()
+        with b:
+            if st.button('Cancelar', key='new_evaluation_cancel'):
+                st.session_state.confirm_new_evaluation = False
+                st.rerun()
+
 with st.sidebar:
     st.header('Configurações')
     radius = st.number_input('Raio de pesquisa (metros)', min_value=100, max_value=5000, value=1000, step=100)
@@ -66,15 +100,15 @@ with st.sidebar:
     st.metric('Routes nesta sessão', f"{st.session_state.api_usage['routes']}/{SESSION_ROUTES_CAP}")
     st.warning('Limites acima valem apenas para esta sessão. Reiniciar o aplicativo ou abrir outra sessão zera os contadores. Para limite efetivo, configure cotas no Google Cloud.')
 
-mode = st.radio('Modo de levantamento', ['Pesquisa automática pelo Google Maps', 'Cadastro manual sem localização eletrônica'], horizontal=True)
+mode = st.radio('Modo de levantamento', ['Pesquisa automática pelo Google Maps', 'Cadastro manual sem localização eletrônica'], horizontal=True, key=f'mode_{st.session_state.evaluation_seq}')
 manual_mode = mode.startswith('Cadastro manual')
 if st.session_state.get('last_mode') != mode:
     st.session_state.last_mode = mode
     for k in ('rows','road','lat','lon','query_radius','query_address','manual_initialized','routes_last_report'):
         st.session_state.pop(k,None)
     st.session_state.editor_revision=st.session_state.get('editor_revision',0)+1
-link = st.text_input('Link Google Maps ou coordenadas (latitude, longitude)', placeholder='https://www.google.com/maps/... ou -8.28, -35.97')
-address = st.text_input('Identificação do imóvel (opcional)', placeholder='Rua, número, bairro, cidade e UF')
+link = st.text_input('Link Google Maps ou coordenadas (latitude, longitude)', placeholder='https://www.google.com/maps/... ou -8.28, -35.97', key=f'link_{st.session_state.evaluation_seq}')
+address = st.text_input('Identificação do imóvel (opcional)', placeholder='Rua, número, bairro, cidade e UF', key=f'address_{st.session_state.evaluation_seq}')
 
 if not manual_mode and st.button('Pesquisar localização e estabelecimentos', type='primary', disabled=not bool(api_key)):
     try:
@@ -267,8 +301,8 @@ if 'rows' in st.session_state:
         if infra_text: st.text_area('Considerando único gerado',value=infra_text,height=160,disabled=True)
     st.subheader('Complementos e validação profissional')
     notes=st.text_area('Considerandos adicionais confirmados pelo avaliador', height=130,
-                       placeholder='Descreva apenas características verificadas, com indicação da fonte ou vistoria.')
-    verified=st.checkbox('Conferi os registros, as distâncias, as fontes e o texto. Autorizo a exportação após revisão humana.', value=False)
+                       placeholder='Descreva apenas características verificadas, com indicação da fonte ou vistoria.', key=f'notes_{st.session_state.evaluation_seq}')
+    verified=st.checkbox('Conferi os registros, as distâncias, as fontes e o texto. Autorizo a exportação após revisão humana.', value=False, key=f'verified_{st.session_state.evaluation_seq}')
     if verified:
         if not manual_mode and (origin_lat,origin_lon)!=(lat,lon):
             st.error('Confirme as coordenadas da origem antes de exportar.');st.stop()
