@@ -1,46 +1,15 @@
-## PTAM GEO v2.8: percurso a pé por logradouros públicos
+# PTAM GEO v3.0 — Pesquisa assistida por logradouros
 
-O Google Routes agora consulta o modo `WALK`, não automóvel. O critério adotado é o menor percurso a pé por ruas, avenidas, travessas e demais logradouros públicos regulares identificados no mapa. Não utilizar becos, vielas, atalhos por terrenos ou travessias não oficiais de cursos d’água. Pontes e travessias oficiais de pedestres integradas aos logradouros são admitidas.
+Atualização sobre a v2.9. Mantém o módulo de considerandos e substitui os três botões de buscas genéricas do módulo de amostras.
 
-**Limitação:** a API Google Routes não permite proibir automaticamente todas essas passagens. O avaliador deve conferir o trajeto, corrigir manualmente a distância quando necessário, registrar fonte e marcar **Trajeto por logradouros conferido**. A exportação de registros selecionados fica bloqueada sem essa validação. O botão de cálculo desmarca a conferência das rotas recalculadas.
+## Pesquisa de anúncios
+- Informe o link ou coordenadas do imóvel para referência e verificação de distância das amostras cadastradas.
+- Informe o logradouro, bairro e cidade/UF. O aplicativo não extrai automaticamente nomes de ruas a partir do link do Google Maps.
+- Escolha o tipo de imóvel e clique em **Pesquisar anúncios no Google**.
+- Opcionalmente, informe logradouros próximos, um por linha, para gerar pesquisas específicas.
+- Abra os anúncios encontrados, confira o endereço e registre links e dados das amostras na tabela existente.
 
-Cadastro manual sem coordenadas, preservação de distâncias conferidas, autenticação Google e exportação Word permanecem. Não há persistência entre sessões. Para instalar, substituir os arquivos do repositório GitHub pelos do ZIP e aguardar deploy do Streamlit. Segredos permanecem somente no Streamlit Cloud.
+**Limitação essencial:** o Google Search não permite filtrar anúncios por círculo de 500 m ou 1 km. O raio escolhido é referência; somente amostras com coordenadas confirmadas são classificadas como dentro/fora do raio pelo aplicativo. Resultados de pesquisa não são amostras verificadas. Não há nova API nem coleta automatizada de sites.
 
-
-## Categorias ampliadas na v2.8
-- Academias (gym).
-- Shoppings e centros de compras (shopping_mall e busca textual por centros comerciais/galerias).
-- Saúde: hospitais, clínicas, médicos e farmácias, com buscas textuais complementares para UBS, USF/PSF, UPA, maternidades, clínicas/hospitais veterinários e USB.
-- A pesquisa utiliza o raio geográfico informado. A distância por percurso a pé é calculada posteriormente para os pontos selecionados.
-- As buscas textuais são indicativas, podem retornar resultados imprecisos ou incompletos e exigem confirmação humana de categoria, natureza e funcionamento.
-- As buscas complementares aumentam o consumo da Places API. O contador preventivo contabiliza todas as requisições previstas antes de pesquisar.
-
-
-## Fluxo simplificado v2.8
-1. Pesquise os estabelecimentos e marque **Incluir** nos relevantes.
-2. Clique **Calcular percursos a pé dos selecionados**. São processados até dez locais por lote, sujeitos à cota da sessão.
-3. Confira os trajetos em logradouros públicos e marque a validação apenas após verificar.
-4. Corrija somente distâncias incorretas, escolhendo a origem da medição (Google Earth, medição manual ou outra).
-5. Clique **Salvar e proteger correções da tabela** e exporte o Word após a validação.
-
-Distâncias editadas são automaticamente protegidas de cálculos posteriores. O botão de ajuste de origem e coordenadas fica na seção excepcional. Se a localização do imóvel ou do estabelecimento estiver incorreta, ajuste-a e recalcule o percurso afetado. Dados permanecem apenas na sessão Streamlit, sem armazenamento permanente. O Google Routes não garante automaticamente exclusão de vielas e atalhos.
-
-
-## Versão 2.8.2: botão Nova avaliação
-Na barra lateral, selecione **Nova avaliação** e confirme. O aplicativo descarta os resultados, revisões, formulário de infraestrutura, texto complementar e confirmação de exportação da avaliação anterior. Os campos de endereço e localização são reiniciados. O login Google e os contadores de consumo de APIs da sessão são preservados. **Exporte o Word antes de confirmar:** não existe recuperação automática da avaliação descartada. Não use Limpar caches para iniciar outro imóvel. A dependência `httpx` foi explicitamente mantida em `requirements.txt` para o login Google.
-
-## Versão 2.9: módulo independente de pesquisa de amostras
-
-Na barra lateral, selecione **Pesquisa de amostras mercadológicas**. O módulo atual **Considerandos e entorno** permanece inalterado, exceto pela inclusão do seletor de módulos.
-
-1. Informe coordenadas ou link Google Maps do imóvel avaliando, cidade/bairro e tipo de imóvel. O raio inicial é **1.000 metros**.
-2. Abra as pesquisas assistidas em buscadores. **Não há busca automática de anúncios dentro do raio**, nem integração direta aos portais. A localização dos resultados de buscadores precisa ser conferida.
-3. Cadastre os anúncios manualmente ou importe um CSV. Informe preço, área, endereço, coordenadas (se disponíveis), fonte, link, data e situação do anúncio.
-4. Confira o cálculo automático de R$/m² e o filtro geográfico em linha reta quando **origem e destino possuem coordenadas**. A ausência de coordenadas é identificada como **Não verificado**. O raio de 1 km é apenas um filtro de triagem, não uma prova de comparabilidade.
-5. Selecione e exporte os registros para CSV ou Word. A média exibida é **apenas descritiva**: não é resultado de avaliação e não aplica tratamento de dados, homogeneização ou fator de oferta.
-
-**Fontes e limitações:** o aplicativo não coleta anúncios de terceiros por raspagem, não comprova preços de venda efetivamente negociados e não verifica vigência, localização ou titularidade dos anúncios. Não classifique anúncios como transações realizadas sem documentação. Registre fontes e datas e confira comparabilidade e autorização de uso das informações.
-
-**Privacidade:** os dados ficam apenas na sessão do Streamlit; exporte antes de encerrar. Não inclua CPF, telefone ou outros dados pessoais desnecessários. As buscas externas são abertas pelo navegador do usuário.
-
-**Custos:** o módulo de amostras não faz novas chamadas às APIs Google Places/Routes. Os links de pesquisa externa podem ter condições próprias de uso. O módulo de entorno mantém suas cotas e dependências.
+## Instalação
+Substitua os arquivos da raiz do repositório pelos arquivos desta pasta, mantendo as credenciais apenas nos Secrets do Streamlit Cloud. Verifique o funcionamento do módulo de considerandos e do módulo de amostras antes do uso profissional.

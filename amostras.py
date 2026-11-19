@@ -96,8 +96,8 @@ def export_docx(rows,origin_text,radius_m,property_type):
 
 def render():
     st.title('PTAM GEO | Pesquisa de amostras mercadológicas')
-    st.caption('Módulo independente • Pesquisa assistida • Importação e cadastro • Conferência profissional • Word editável')
-    st.info('A pesquisa na internet é assistida: os links abrem buscas externas. Não há extração automática de anúncios nem acesso a preços efetivamente negociados. O filtro de 1 km só pode ser verificado para amostras com coordenadas informadas.')
+    st.caption('Módulo independente • Pesquisa por logradouros • Importação e cadastro • Conferência profissional • Word editável')
+    st.info('A pesquisa assistida abre o Google com consultas por logradouro, bairro e cidade. Não há extração automática de anúncios nem acesso a preços negociados. A confirmação do raio depende das coordenadas verificadas de cada amostra.')
     if 'samples_seq' not in st.session_state: st.session_state.samples_seq=0
     seq=st.session_state.samples_seq
     with st.sidebar:
@@ -128,12 +128,44 @@ def render():
             st.success(f'Origem identificada: {origin[0]:.6f}, {origin[1]:.6f}')
         except Exception as exc:
             st.warning(f'Não foi possível confirmar a origem: {exc}. Você ainda pode pesquisar e cadastrar amostras, mas não será possível conferir o raio automaticamente.')
-    st.subheader('1. Pesquisa assistida de anúncios')
-    st.caption('Abra as buscas, confira os anúncios e registre os dados na tabela. Os resultados dos buscadores podem incluir imóveis fora do raio selecionado.')
-    query=f'{kind} à venda {city}'.strip()
-    terms=[('Google: anúncios imobiliários',f'{query} imóvel preço área m²'),('Google: portais imobiliários',f'{query} site:vivareal.com.br OR site:zapimoveis.com.br OR site:olx.com.br'),('Google: imobiliárias locais',f'{query} imobiliária')]
-    for title,q in terms:
-        st.link_button(title,'https://www.google.com/search?q='+quote_plus(q),use_container_width=False)
+    st.subheader('1. Encontrar links de anúncios próximos')
+    st.info('Pesquisa por logradouro e região no Google, sem API adicional. O Google não oferece filtro circular de 500 m ou 1 km para anúncios: o raio é referência de triagem e não garantia de localização dos resultados.')
+    street=st.text_input('Logradouro do imóvel avaliando',key=f'samples_street_{seq}',placeholder='Ex.: Avenida Portugal')
+    neighborhood=st.text_input('Bairro do imóvel avaliando',key=f'samples_neighborhood_{seq}',placeholder='Ex.: Universitário')
+    municipality=st.text_input('Cidade e UF',key=f'samples_municipality_{seq}',placeholder='Ex.: Caruaru PE')
+    nearby=st.text_area('Outros logradouros próximos (opcional; um por linha)',key=f'samples_nearby_{seq}',height=90,placeholder='Ex.: Rua A\nRua B')
+    st.caption('O link do Google Maps fornece a referência geográfica para conferência das amostras, mas não revela automaticamente o nome da rua. Informe o logradouro para uma busca mais precisa.')
+    # Não inserir "500 metros"/"1 km" na consulta: buscadores não aplicam esse raio a anúncios.
+    def google_search(parts):
+        q=' '.join(str(part).strip() for part in parts if str(part).strip())
+        return 'https://www.google.com/search?q='+quote_plus(q)
+    place=municipality.strip() or city.strip()
+    target=street.strip()
+    area=neighborhood.strip()
+    if not target and not area and not place:
+        st.warning('Informe ao menos o logradouro, o bairro ou a cidade para preparar a busca.')
+    else:
+        main_parts=[f'"{target}"' if target else '',f'"{area}"' if area else '',place]
+        primary=google_search([kind,'à venda','imóvel',*main_parts])
+        st.link_button('Pesquisar anúncios no Google',primary,type='primary')
+        st.caption('A pesquisa prioriza o logradouro informado. Abra os anúncios e confira a localização antes de considerar qualquer resultado dentro do raio.')
+        searches=[]
+        if target and area:
+            searches.append(('Buscar pelo logradouro (sem exigir bairro)',google_search([kind,'à venda',f'"{target}"',place])))
+        if area:
+            searches.append(('Buscar pelo bairro',google_search([kind,'à venda',f'"{area}"',place])))
+        unique_streets=[]
+        for line in nearby.splitlines():
+            v=line.strip()
+            if v and v.casefold() not in [x.casefold() for x in unique_streets] and v.casefold()!=target.casefold():
+                unique_streets.append(v)
+        for nearby_street in unique_streets[:12]:
+            searches.append((f'Buscar na {nearby_street}',google_search([kind,'à venda',f'"{nearby_street}"',place])))
+        if searches:
+            with st.expander('Ampliar pesquisa para bairro e logradouros próximos'):
+                for title,url in searches:
+                    st.link_button(title,url)
+        st.caption(f'Raio de referência escolhido: {radius} m. Somente amostras com coordenadas confirmadas podem ser classificadas como dentro ou fora do raio na tabela abaixo.')
     st.subheader('2. Cadastro, importação e seleção de amostras')
     if 'samples_rows' not in st.session_state: st.session_state.samples_rows=[]
     if 'samples_rev' not in st.session_state: st.session_state.samples_rev=0
