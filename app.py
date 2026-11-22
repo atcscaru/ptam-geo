@@ -1,4 +1,6 @@
 import streamlit as st
+import json
+from datetime import datetime, timezone
 import pandas as pd
 import folium
 from streamlit_folium import st_folium
@@ -35,6 +37,80 @@ if current_email != allowed_email or email_verified is not True:
         st.logout()
     st.stop()
 
+# Identificação da versão visível em ambos os módulos.
+APP_VERSION = '3.1'
+st.caption(f'PTAM GEO • Versão {APP_VERSION}')
+
+# Recuperação local: arquivo baixado pelo avaliador, sem armazenar dados do imóvel no servidor.
+# O Streamlit Cloud pode reiniciar ou encerrar a sessão; session_state não é armazenamento permanente.
+def _json_safe(value):
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if hasattr(value, 'item'):
+        return _json_safe(value.item())
+    raise TypeError(f'Tipo não exportável: {type(value).__name__}')
+
+# Evitar serializar objetos internos do Streamlit, componentes do editor e controles temporários.
+def _snapshot():
+    result = {}
+    for k, v in st.session_state.items():
+        if k in ('api_usage', 'backup_upload', 'backup_confirm', 'ptam_modulo'):
+            continue
+        if k.startswith(('editor_', 'samples_editor_', 'FormSubmitter:')):
+            continue
+        try:
+            result[k] = _json_safe(v)
+        except (TypeError, ValueError, OverflowError):
+            continue
+    return json.dumps({'format': 'ptam-geo-backup', 'version': 1,
+                       'created_at_utc': datetime.now(timezone.utc).isoformat(),
+                       'module': st.session_state.get('ptam_modulo', 'Considerandos e entorno'),
+                       'data': result}, ensure_ascii=False, indent=2, allow_nan=False).encode('utf-8')
+
+with st.sidebar:
+    st.divider()
+    st.subheader('Segurança da pesquisa')
+    st.caption('Faça um backup após salvar a tabela e durante pesquisas longas. O backup fica no seu computador.')
+    try:
+        backup_bytes = _snapshot()
+        st.download_button('Baixar backup da pesquisa (.json)', backup_bytes,
+                           'PTAM_GEO_Backup.json', 'application/json',
+                           use_container_width=True, key='download_backup')
+    except (TypeError, ValueError) as exc:
+        st.warning(f'Backup indisponível: {exc}')
+    uploaded_backup = st.file_uploader('Restaurar backup (.json)', type=['json'], key='backup_upload')
+    if uploaded_backup is not None:
+        if st.button('Restaurar pesquisa salva', key='backup_restore', use_container_width=True):
+            try:
+                if uploaded_backup.size > 5_000_000:
+                    raise ValueError('Arquivo maior que 5 MB.')
+                payload = json.loads(uploaded_backup.getvalue().decode('utf-8'))
+                if payload.get('format') != 'ptam-geo-backup' or payload.get('version') != 1:
+                    raise ValueError('Arquivo não é um backup compatível do PTAM GEO.')
+                data = payload.get('data')
+                if not isinstance(data, dict) or len(data) > 300:
+                    raise ValueError('Estrutura do backup inválida.')
+                # Não restaurar contadores de API nem controles de upload/autenticação.
+                for key in list(st.session_state.keys()):
+                    if key not in ('api_usage', 'backup_upload'):
+                        del st.session_state[key]
+                for key, value in data.items():
+                    if (isinstance(key, str) and len(key) < 150
+                            and key not in ('api_usage', 'backup_upload', 'ptam_modulo')
+                            and not key.startswith(('editor_', 'samples_editor_'))):
+                        st.session_state[key] = value
+                st.session_state.ptam_modulo = payload.get('module') if payload.get('module') in (
+                    'Considerandos e entorno', 'Pesquisa de amostras mercadológicas') else 'Considerandos e entorno'
+                st.session_state.editor_revision = st.session_state.get('editor_revision', 0) + 1
+                st.session_state.samples_rev = st.session_state.get('samples_rev', 0) + 1
+                st.rerun()
+            except (ValueError, TypeError, UnicodeDecodeError, AttributeError) as exc:
+                st.error(f'Não foi possível restaurar o arquivo: {exc}')
+
 with st.sidebar:
     st.caption('Acesso autorizado')
     if st.button('Sair', key='logout'):
@@ -49,7 +125,7 @@ if modulo == 'Pesquisa de amostras mercadológicas':
     st.stop()
 
 st.title('PTAM GEO | Considerandos para avaliação mercadológica')
-st.caption('Versão 3.0 • Acesso Google restrito • Pesquisa automática ou manual • Percurso a pé por logradouros • Word editável')
+st.caption('Versão 3.1 • Acesso Google restrito • Pesquisa automática ou manual • Percurso a pé por logradouros • Word editável')
 st.warning('Os cadastros são indicativos. Não declare pavimentação, redes públicas, funcionamento de serviços, natureza pública de instituições ou esquina mais próxima sem confirmação.')
 try:
     api_key = st.secrets.get('GOOGLE_MAPS_API_KEY', '')

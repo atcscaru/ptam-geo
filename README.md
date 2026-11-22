@@ -13,3 +13,14 @@ Atualização sobre a v2.9. Mantém o módulo de considerandos e substitui os tr
 
 ## Instalação
 Substitua os arquivos da raiz do repositório pelos arquivos desta pasta, mantendo as credenciais apenas nos Secrets do Streamlit Cloud. Verifique o funcionamento do módulo de considerandos e do módulo de amostras antes do uso profissional.
+
+
+## Versão 3.1: recuperação de pesquisa
+
+- A versão aparece no alto da tela, em ambos os módulos.
+- Na barra lateral, **Baixar backup da pesquisa (.json)** cria um arquivo local com o estado salvo na sessão.
+- **Restaurar backup (.json)** recupera dados depois de reinício ou desconexão.
+- Antes do backup, clique em **Salvar e proteger correções da tabela** (considerandos) ou **Salvar alterações da tabela** (amostras), para incorporar edições ainda não confirmadas.
+- Não há salvamento automático durável: a hospedagem Streamlit pode reiniciar e perder dados ainda não baixados. Para evitar perdas sem intervenção, será necessário integrar armazenamento persistente externo com controle de acesso.
+- Não compartilhe arquivos de backup: podem conter dados confidenciais dos imóveis e da avaliação.
+- Reinícios podem decorrer de deploy, memória, instabilidade ou encerramento da sessão. A causa específica exige logs do Streamlit Cloud no horário do ocorrido.
