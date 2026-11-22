@@ -1,5 +1,6 @@
 import streamlit as st
 import json
+import math
 from datetime import datetime, timezone
 import pandas as pd
 import folium
@@ -9,7 +10,7 @@ from exporter import build_docx
 from infrastructure import FIELDS, build_infrastructure_considerando
 from geo import haversine
 
-st.set_page_config(page_title='PTAM GEO v3.1.1', page_icon='📍', layout='wide')
+st.set_page_config(page_title='PTAM GEO v3.1.2', page_icon='📍', layout='wide')
 
 # Autenticação obrigatória antes de qualquer consulta, dado do imóvel ou mapa.
 # Configure [auth] e ALLOWED_GOOGLE_EMAIL em Streamlit Cloud > Settings > Secrets.
@@ -38,18 +39,29 @@ if current_email != allowed_email or email_verified is not True:
     st.stop()
 
 # Identificação da versão visível em ambos os módulos.
-APP_VERSION = '3.1.1'
+APP_VERSION = '3.1.2'
 st.caption(f'PTAM GEO • Versão {APP_VERSION}')
 
 # Recuperação local: arquivo baixado pelo avaliador, sem armazenar dados do imóvel no servidor.
 # O Streamlit Cloud pode reiniciar ou encerrar a sessão; session_state não é armazenamento permanente.
 def _json_safe(value):
-    if value is None or isinstance(value, (str, int, float, bool)):
+    """Converte dados de pesquisa em JSON estrito, sem NaN/Infinity."""
+    if value is None or isinstance(value, (str, bool)):
         return value
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
     if isinstance(value, (list, tuple)):
         return [_json_safe(v) for v in value]
     if isinstance(value, dict):
         return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, pd.DataFrame):
+        return _json_safe(value.to_dict(orient='records'))
+    if isinstance(value, pd.Series):
+        return _json_safe(value.tolist())
+    if value is pd.NA or value is pd.NaT:
+        return None
     if hasattr(value, 'item'):
         return _json_safe(value.item())
     raise TypeError(f'Tipo não exportável: {type(value).__name__}')
