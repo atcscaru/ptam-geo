@@ -9,7 +9,7 @@ from exporter import build_docx
 from infrastructure import FIELDS, build_infrastructure_considerando
 from geo import haversine
 
-st.set_page_config(page_title='PTAM GEO v3.0', page_icon='📍', layout='wide')
+st.set_page_config(page_title='PTAM GEO v3.1.1', page_icon='📍', layout='wide')
 
 # Autenticação obrigatória antes de qualquer consulta, dado do imóvel ou mapa.
 # Configure [auth] e ALLOWED_GOOGLE_EMAIL em Streamlit Cloud > Settings > Secrets.
@@ -38,7 +38,7 @@ if current_email != allowed_email or email_verified is not True:
     st.stop()
 
 # Identificação da versão visível em ambos os módulos.
-APP_VERSION = '3.1'
+APP_VERSION = '3.1.1'
 st.caption(f'PTAM GEO • Versão {APP_VERSION}')
 
 # Recuperação local: arquivo baixado pelo avaliador, sem armazenar dados do imóvel no servidor.
@@ -331,8 +331,8 @@ if 'rows' in st.session_state:
                 st.error('Atualize primeiro a origem corrigida na seção excepcional.');st.stop()
             selected=[r for r in updated if r.get('incluir') and not r.get('distancia_confirmada')]
             eligible=[r for r in selected if pd.notna(r.get('latitude')) and pd.notna(r.get('longitude'))]
-            if len(eligible)>10:
-                st.warning('Selecione até 10 percursos não protegidos por lote.')
+            if len(eligible)>20:
+                st.warning('Selecione até 20 percursos não protegidos por lote.')
             elif st.session_state.api_usage['routes']+len(eligible)>SESSION_ROUTES_CAP:
                 st.warning('Limite preventivo de rotas nesta sessão atingido.')
             elif not eligible:

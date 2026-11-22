@@ -24,3 +24,11 @@ Substitua os arquivos da raiz do repositório pelos arquivos desta pasta, manten
 - Não há salvamento automático durável: a hospedagem Streamlit pode reiniciar e perder dados ainda não baixados. Para evitar perdas sem intervenção, será necessário integrar armazenamento persistente externo com controle de acesso.
 - Não compartilhe arquivos de backup: podem conter dados confidenciais dos imóveis e da avaliação.
 - Reinícios podem decorrer de deploy, memória, instabilidade ou encerramento da sessão. A causa específica exige logs do Streamlit Cloud no horário do ocorrido.
+
+
+## Atualização 3.1.1
+- Permite até 20 percursos a pé selecionados por lote.
+- O limite preventivo de 30 consultas Routes por sessão continua ativo.
+- A perda de sessão não está resolvida por esta atualização: o backup é manual.
+- Para recuperação automática após reinício, configurar armazenamento persistente privado (banco de dados), com autenticação e controle de acesso.
+- Verificar logs do Streamlit Cloud para determinar a causa específica dos reinícios.
